@@ -1,0 +1,51 @@
+pm : lightweight, simple password manager.
+
+Usage: pm [verb] [NAME] [options]
+
+Verbs:
+    set : Make a new entry with the given name. You will then be prompted for
+        the secret key, and the text to store.
+
+        get : Retrieve a stored password under the given name. The secret key
+        is required to retrieve the password.
+
+    forg : (forget) Mark the named entry as forgotten. The password hash WILL NOT
+        be deleted. The entry must be remembered for the password to be retrieved
+        again.
+
+    rem : (remember) Find the forgotten entry by the given name and return it to
+        normal status so it may be retrieved.
+
+    del : (delete) Remove the named entry from the database. Cannot be undone.
+
+    loc : (locate) Prints a list of entries which match the given expression.
+
+Options: By default, the retrieved password is written to the clipboard, where it
+    will remain for CLIPCOOLDOWN seconds. After the interval, the clipboard is rewritten
+    with its previous contents. Pm remembers if it has written multiple passwords,
+    and will clear all of them at the end of the interval.*
+
+    -e : Echo the retrieved password to stdout. Not recommended.
+
+    -noval : Do not store hash - pm will be unable to check the password for validity
+        on future retrieval.
+
+    -v : Set the target vault. If not specified, the default from pm.conf is targeted.
+
+    -db : Set the target database. As with vault, the defualt will be used if not specified.
+
+
+Configuration:*
+
+In .pm.conf :
+
+MASTERMODE=1 # By default, the same secret key must be used to encrypt all stored passwords
+CACHEKEY=0   # Number of seconds for which the secret key will remain in memory,
+                    # allowing the user to retrieve further keys without re-entering
+                    # the secret key.
+CLIPCOOLDOWN=120 # Number of seconds that retrieved passwords will remain in the clipboard
+                        # until the clipboard is restored. A value of 0 means
+                        # the clipboard will not be restored.
+PATHTODB=/Users/owen/cs/dev/pm/rsc/pswds.db
+
+* NOT YET
