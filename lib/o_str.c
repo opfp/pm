@@ -28,7 +28,7 @@ char * concat( char * base, int num_ins, ... ){ //currently only supports string
         char * this = va_arg(args, char * );
 
         if ( ins == NULL || this == NULL ) {
-            printf("o_str.concat: Argument / insertion char mismatch\n");
+            printf("o_str.concat: argument / insertion char mismatch\n");
             return NULL;
         }
         int ins_len = strlen(this);
@@ -38,7 +38,7 @@ char * concat( char * base, int num_ins, ... ){ //currently only supports string
         }
         insertions[i] = this;
         insertions_len[i] = ins_len;
-        *ins = 1; // Flag for do insertion here //THIS LINE CAUSING BUS ERROR
+        *ins = 1; // Flag for do insertion here 
 
         full_len += ins_len;
         i++;
@@ -61,7 +61,7 @@ char * concat( char * base, int num_ins, ... ){ //currently only supports string
         rover++;
     }
     *inserter = 0;
-    free(base_copy); 
+    free(base_copy);
     free(insertions);
     free(insertions_len);
 

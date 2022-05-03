@@ -30,14 +30,25 @@ int main( int argc, char * * argv ) {
     }
 
     char * verbs[] = { "set", "get", "forg", "rec", "del", "loc", "help" };
+    char need_name[] = { 1, 1, 1, 1, 1, 1, 0 };
     int verbs_len = 7;
     void (*functions[])(pm_inst *, char *) = { set, get, forget, recover, delete, locate, help };
 
     char * verb = argv[1];
     int i = 0;
     for(/*i*/; i < verbs_len; i++ ) {
-        if ( strcmp(verb, verbs[i]) == 0 )
+        if ( strcmp(verb, verbs[i]) == 0 ) {
+            if ( need_name[i] ) {
+                if ( argc < 3 || argv[2] == NULL || strlen(argv[2]) == 0 ) {
+                    printf("%s: name required. [pm help]\n", verbs[i]);
+                    return -1;
+                } else if ( strlen(argv[2]) > 31 ) {
+                    printf("pm: name must be less than 32 characters long.\n");
+                    return -1;
+                }
+            }
             (*functions[i])(PM_INST, argv[2]);
+        }
     }
 
     if (i == verbs_len - 1 ) {
@@ -47,17 +58,15 @@ int main( int argc, char * * argv ) {
 }
 
 void set(pm_inst * PM_INST, char * name) {
-    if (name == NULL){
-        printf("Set: a name is required for each entry. pm set [NAME]\n");
-        return;
-    }
-    int namelen = strlen(name);
-    if ( namelen > 31 ) {
-        printf("Set: Name must be less than 32 characters long.");
-        return;
-    }
+    // if (name == NULL){
+    //     printf("Set: a name is required for each entry. pm set [NAME]\n");
+    //     return;
+    // }
+
     //CHECK FOR ENTRY WITH NAME
-    int exists = _entry_in_vault(PM_INST, name, namelen);
+    int name_len = strlen(name);
+
+    int exists = _entry_in_vault(PM_INST, name, name_len);
     if ( exists == 2 ) {
         printf("Set: an entry with name %s already exists in %s.\n", name, PM_INST->table_name );
         return;
@@ -130,7 +139,7 @@ void set(pm_inst * PM_INST, char * name) {
     }
     // Bind real values to compiled parameterized query
     int binds[6]; // (ID,SALT,MASTER_KEY,CIPHER,VIS,VALIDATE)
-    binds[0] = sqlite3_bind_text(stmt_handle, 1, name, namelen, SQLITE_STATIC/*?*/);
+    binds[0] = sqlite3_bind_text(stmt_handle, 1, name, name_len, SQLITE_STATIC/*?*/);
     binds[1] = sqlite3_bind_text(stmt_handle, 2, salt, 9, SQLITE_STATIC);
     binds[2] = sqlite3_bind_blob(stmt_handle, 3, master_key, M_KEYSIZE, SQLITE_STATIC);
     binds[3] = sqlite3_bind_blob(stmt_handle, 4, PM_INST->ciphertext, DATASIZE +
@@ -154,16 +163,8 @@ void set(pm_inst * PM_INST, char * name) {
 }
 
 void get(pm_inst * PM_INST, char * name) {
-    if (name == NULL){
-        printf("Get: a name is required for each entry. pm -s [NAME]\n");
-        return;
-    }
-    int name_len = strlen(name);
-    if ( name_len >= NAMELEN) {
-        printf("Get: name must be less than %i characters long\n", NAMELEN);
-        return;
-    }
     // Check for exists / in trash
+    int name_len = strlen(name);
     int exists = _entry_in_vault(PM_INST, name, name_len);
     if ( exists == 0 ) {
         printf("Get: No entry %s exists in %s. Perhaps look elsewhere? [pm ls-vaults] to list vaults\n",
@@ -243,10 +244,6 @@ void recover(pm_inst * PM_INST, char * name) {
 }
 
 void delete(pm_inst * PM_INST, char * name) {
-    if (name == NULL) {
-        printf("Del: a name is required for each entry. pm del [NAME]\n");
-        return;
-    }
     int name_len = strlen(name);
     if ( _entry_in_vault(PM_INST, name, name_len) == 0 ) {
         printf("Del: no entry to delete\n");
@@ -261,15 +258,7 @@ void delete(pm_inst * PM_INST, char * name) {
 }
 
 void locate(pm_inst * PM_INST, char * name) {
-    if (name == NULL){
-        printf("Locate: please enter a name. pm -l [NAME]\n");
-        return;
-    }
     int name_len = strlen(name);
-    if ( name_len == 0 ) {
-        printf("Locate: please enter a name. pm -l [NAME]\n");
-        return;
-    }
     int found = _entry_in_vault( PM_INST, name, name_len );
     if ( found == 2 ) {
         printf("%s:%s found.\n", PM_INST->table_name, name);
