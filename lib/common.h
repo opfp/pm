@@ -23,7 +23,7 @@
 
 #include "hydrogen.h" // Need?
 #include "sqlite3.h"
-#include "o_str.h" 
+#include "o_str.h"
 
 typedef struct {
     sqlite3 * db;
@@ -33,10 +33,12 @@ typedef struct {
     uint8_t plaintext[DATASIZE];
     uint8_t ciphertext[CIPHERSIZE];// (64 + 32 = 96)
     int guardian_pid;
-    char enc_flags; // see pm.c
-    char dec_flags;
+    int cooldown;
+    char crypt_opts; // see idocs for explanation
+    char pm_opts;
 } pm_inst;
 
+#include "cli.h" 
 #include "pm.h"
 #include "enc.h"
 

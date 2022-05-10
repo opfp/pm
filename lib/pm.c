@@ -1,34 +1,80 @@
 #include "pm.h"
 
-pm_inst * __init__() {
+int main( int argc, char * * argv ) {
+    if ( argc < 2 ) {
+        printf("pm: headless invocation error. Has pm been installed properly?\n");
+        return -1;
+    }
+    // args[1] is the path to pm.conf
+    FILE * pm_conf = fopen(argv[1], "r");
+    if ( pm_conf == NULL ) {
+        printf("Your pm configuration file ( %s ) not found. PM has either not"\
+            " been installed, or your install has been corrupted.\n", argv[1]);
+        return -1;
+    }
+    fseek(pm_conf, 0, SEEK_END);
+    int pm_conf_sz = ftell(pm_conf);
+    rewind(pm_conf); //nesecary?
+
+    if ( pm_conf_sz > 2048 ) {
+        printf("Your pm configuration file ( %s ) is too long. Must be less than 2048 bytes\n",
+            argv[1]);
+        return -1;
+    } else if ( pm_conf_sz == 0 ) {
+        printf("Your pm configuration file ( %s ) appears to be empty.\n", argv[1]);
+        return -1;
+    }
+
+    char * pm_conf_str = malloc(pm_conf_sz+1);
+    pm_conf_str[pm_conf_sz] = 0;
+    fread( pm_conf_str, 1, pm_conf_sz, pm_conf);
+
+    char * att_names[] = { "cooldown" , "db_path" , "warn", "val", "confirm_cphr" };
+    char * * atts = get_atts_conf( pm_conf_str, 5, att_names);
+
+    if ( !atts ) {
+        printf("Issue with %s. Has pm been installed / configured correctly?\n", argv[1]);
+        return -1;
+    }
+
+    int cooldown = atoi(atts[0]); // and with 1 to make sure
+    char * db_path = atts[1];
+    char warn = atoi(atts[2]) & 1;
+    char val = atoi(atts[3]) & 1;
+    char confirm_cphr = atoi(atts[4]) & 1;
+    char pout = 0;
+
+    if ( cooldown > 600 ) {
+        cooldown = 600;
+        printf("Maximum configurable cooldown is 600s. Edit your cooldown settings"
+            " in %s to avoid seeing this warning in the future", argv[1] );
+    }
+
     if ( hydro_init() != 0 ) {
         printf("Init: error initilizing hydrogen\n");
-        exit(0);
+        return -1;
     }
 
     pm_inst * PM_INST = malloc( sizeof(pm_inst));
     memset(PM_INST, 0, sizeof(pm_inst));
-    PM_INST->enc_flags = 3;
-    /*  ENC flags will be sourced from config file
-        & 1 : Keep master_key for password validation ( via hash and keysearch )
-        & 2 : Warn if retreiveing or setting an entry with validation off
-    */
 
-    /*
-        Connect to database ~ eventually should come from config file, and
-        should be configurable from the command line
-    */
-    char db_path[] = "/Users/owen/cs/dev/pm/rsc/pswds.db";
+    PM_INST->cooldown = cooldown;
+
+    PM_INST->pm_opts = 0 | (confirm_cphr << 2) | ( warn << 1 ) | pout;
+    PM_INST->crypt_opts = 0 | ( val << 1 ) ;
+
     sqlite3 * db;
     if ( sqlite3_open(db_path, &db) != 0 ) {
-        printf("Init: error connecting to database\n");
-        exit(0);
+        printf("Init: error connecting to database: %s. [ pm chdb ] or edit %s\n", db_path, argv[1]);
+        return -1;
     }
 
     char table_name[] = "test";
     strncpy(PM_INST->table_name, table_name, 15);
 
     PM_INST->db = db;
+
+    cli_main(argc - 2, &argv[2], PM_INST);
 
     //For now, lets avoid creating the guardian process until we're out of early testing
     //int pid = fork();
@@ -44,7 +90,7 @@ pm_inst * __init__() {
 
     // IN THE FUTURE THESE WILL COME FROM pm.conf
     //char help_path = "/Users/owen/cs/dev/pm/docs.txt";
-    return PM_INST;
+    // return PM_INST;
 }
 
 int val_pad(char * in) {
@@ -59,6 +105,34 @@ int val_pad(char * in) {
         }
     }
     return 0;
+}
+
+char * * get_atts_conf( char * conf_str, int attc, char * * att_map) {
+    if ( !conf_str || !att_map )
+        return NULL;
+
+    char * * ret = malloc( attc * sizeof(char *) );
+    for( int i = 0; i < attc; i++ ) {
+        char * this_attr = strstr(conf_str, att_map[i]);
+        if (!this_attr)
+            return NULL;
+        // all this is so keys which are also values don't cause trouble
+        // while ( this_attr != conf_str && *(this_attr-1) != '\n' ) {
+        //     this_attr = strstr(this_attr + 1, att_map[i]);
+        //     if ( !this_attr)
+        //         return NULL;
+        // }
+        this_attr = strchr(this_attr, '=')+1;
+        *(strchr(this_attr, '\n')) = 1; // flag for put 0 here later
+        ret[i] = this_attr;
+    }
+    char * rover = strchr(conf_str, 1);
+    while (rover) {
+        *rover++ = 0;
+        rover = strchr(rover, 1);
+    }
+
+    return ret;
 }
 
 // sqlite3_stmt * pm_sqlite3_make_stmt(char * basequery, ...) {

@@ -3,11 +3,12 @@
 
 #include "common.h"
 
-pm_inst * __init__();
+// pm_inst * __init__();
 
 int val_pad(char *);
+char * * get_atts_conf( char *, int, char * *);
 
-sqlite3_stmt * pm_sqlite3_make_stmt( char *, ... );
+// sqlite3_stmt * pm_sqlite3_make_stmt( char *, ... );
 
 // void init_guardian( pm_inst * );
 // void guardian_clear_pm( pm_inst *);

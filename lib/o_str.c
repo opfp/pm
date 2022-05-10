@@ -38,7 +38,7 @@ char * concat( char * base, int num_ins, ... ){ //currently only supports string
         }
         insertions[i] = this;
         insertions_len[i] = ins_len;
-        *ins = 1; // Flag for do insertion here 
+        *ins = 1; // Flag for do insertion here
 
         full_len += ins_len;
         i++;

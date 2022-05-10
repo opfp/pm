@@ -6,7 +6,7 @@
 
 #include "common.h"
 
-int main(int, char * *);
+int cli_main(int, char * *, pm_inst *);
 
 void set(pm_inst *, char *);
 void get(pm_inst *, char *);
