@@ -60,7 +60,7 @@ void set(pm_inst * PM_INST, char * name) {
         printf("Set: an entry with name %s already exists in %s.\n", name, PM_INST->table_name );
         return;
     } else if ( exists == 1 ) { //Entry exists but is in trash, will be overwritten.
-        delete(PM_INST, name);
+        _delete(PM_INST, name, name_len);
     }
 
     char * prompt = "Enter the ciphertext for the entry %:\n";
