@@ -2,35 +2,52 @@
 
 int cli_main( int argc, char * * argv, pm_inst * PM_INST) {
     if ( argc < 1 ) {
-        printf("PM: Not enough arguments. [pm help] for help, or read the docs.\n");
+        printf("pm: Not enough arguments. [pm help] for help, or read the docs.\n");
         //help(void, void);
         return -1;
     }
+    char def_commkey[] = "_main_cmk";
+    char def_arbkey[]  = "_main_ukey";
 
-    char opts = 2;
+    if ( PM_INST->pm_opts & 32 ) { // if defaults only
+        if ( PM_INST->pm_opts & 4 ) // if -u
+            memcpy(PM_INST->table_name, def_commkey, 9);
+        else
+            memcpy (PM_INST->table_name, def_arbkey, 10 );
+        if ( argc == 3 ) {
+            printf("pm is configured to only use default vaults, but vault specified."\
+                "[ pm chattr def_vaults 0 ] to enable user created vaults.\n");
+        }
+    } else if ( argc == 3 ) {
+        if ( strlen(argv[1]) > 15 || !_sql_safe_in(argv[1]) ) {
+            printf("Disallowed vault name. Must be less than 16 characters, and"\
+                "contain only letters, numbers and _. Cannot begin with _.\n");
+            return -1;
+        }
+        if ( !_entry_in_table(PM_INST, "_index", argv[1]) ) {
+            printf("No vault named %s.\n", argv[1]);
+            return -1;
+        }
+        strncpy(PM_INST->table_name, argv[1], 15);
+    } else {
+        memcpy(PM_INST->table_name, def_commkey, 9);
+    }
 
-    // char * db_path;
-    // char * vault;
-    //
-    // if ( argc > 2 ) {
-    //     char * flags[] = { "e", "noval", "q" };
-    //     for ( int i = 0; i < 3; i++ ) {
-    //         for ( int j = 2; j < argc; j++ ) {
-    //             if ( strlen(argv[j]) < 2 || argv[j][1] != '-' )
-    //                 continue;
-    //             if ( strcmp(flags[i], argv[j]+1)) {
-    //                 opts = opts ^ ( 1 << i );
-    //             }
-    //         }
-    //     }
-    //     char * opts[] = { "db", "v" };
-    //     void * text_boxes[] = { db_path, vault };
-    // }
+    // Code for testing
+    char * option_names[] = { "Echo", "Skip pswd hash val", "Use ukey vault",
+        "Confirm cipertexts" , "Warn on no validation" , "Use only default vaults"};
+    unsigned char opts = PM_INST->pm_opts;
+    for ( int i = 0; i < 6; i++) {
+        printf("%i : %s\n", ( opts & 1 ), option_names[i]);
+        opts = opts >> 1;
+    }
+    // ---
 
     char * verbs[] = { "set", "get", "forg", "rec", "del", "loc", "help" };
     char need_name[] = { 1, 1, 1, 1, 1, 1, 0 };
     int verbs_len = 7;
-    void (*functions[])(pm_inst *, char *) = { set, get, forget, recover, delete, locate, help };
+    void (*functions[])(pm_inst *, char *) = { set, get, forget, recover, delete,
+        locate, help };
 
     char * verb = argv[0];
     int i = 0;
@@ -55,7 +72,7 @@ int cli_main( int argc, char * * argv, pm_inst * PM_INST) {
 
 void set(pm_inst * PM_INST, char * name) {
     int name_len = strlen(name);
-    char exists = _entry_in_vault(PM_INST, name, name_len);
+    char exists = _entry_in_table(PM_INST, PM_INST->table_name, name);
     if ( exists == 2 ) {
         printf("Set: an entry with name %s already exists in %s.\n", name, PM_INST->table_name );
         return;
@@ -85,7 +102,7 @@ void set(pm_inst * PM_INST, char * name) {
     memcpy(context, ctxt, ctxt_len);
 
     char * check;
-    if ( PM_INST->pm_opts & 4 ) { // if confirm
+    if ( PM_INST->pm_opts & 8 ) { // if confirm
         check = getpass("Confirm your entry:\n");
         // if ( check == NULL )
         //     check = context; // Not a bug - user can bypass by entering nothing
@@ -119,8 +136,8 @@ void set(pm_inst * PM_INST, char * name) {
     uint8_t master_key[M_KEYSIZE];
     memset( master_key, 0, M_KEYSIZE);
 
-    int validate = 0;
-    if ( ( PM_INST->crypt_opts & 1 ) == 1 ) {
+    int validate = 1;
+    if ( ! (PM_INST->pm_opts & 2) ) { // if not skip validation
         validate = 1;
         memcpy( master_key, PM_INST->master_key + 9, M_KEYSIZE);
     }
@@ -166,14 +183,14 @@ void set(pm_inst * PM_INST, char * name) {
             memset(ctxt, 0, strlen(ctxt));
         if (check)
             memset(check, 0, strlen(check));
-        if ( context )
-            memset(context, 0, DATASIZE);
+        // context is always !NULL
+        memset(context, 0, DATASIZE);
 }
 
 void get(pm_inst * PM_INST, char * name) {
     // Check for exists / in trash
     int name_len = strlen(name);
-    int exists = _entry_in_vault(PM_INST, name, name_len);
+    int exists = _entry_in_table(PM_INST, PM_INST->table_name, name);
     if ( exists == 0 ) {
         printf("Get: No entry %s exists in %s. Perhaps look elsewhere? [pm ls-vaults] to list vaults\n",
             name, PM_INST->table_name);
@@ -226,8 +243,8 @@ void get(pm_inst * PM_INST, char * name) {
     memcpy( PM_INST->ciphertext, sqlite3_column_text(statement, 2) , CIPHERSIZE);
 
     if ( !entry_val ) {
-        PM_INST->crypt_opts &= 0xfd; //remove flag at 2^1 bit (don't validate result)
-        if ( PM_INST->pm_opts & 1 ) { // if warn
+        PM_INST->pm_opts |= 2; //Add flag at 2^1 bit (don't validate result)
+        if ( PM_INST->pm_opts & 16 ) { // if warn
             printf("Warning: decryption validation disabled. PM will be unable to verify\
                 the output for %s\nTo stop seeing this warning: [ pm setattr warn 0 ]\n", name );
         }
@@ -254,7 +271,7 @@ void recover(pm_inst * PM_INST, char * name) {
 
 void delete(pm_inst * PM_INST, char * name) {
     int name_len = strlen(name);
-    if ( _entry_in_vault(PM_INST, name, name_len) == 0 ) {
+    if ( _entry_in_table(PM_INST, PM_INST->table_name, name) == 0 ) {
         printf("Del: no entry to delete\n");
     }
     printf("This will permanently delete %s. This action cannot be undone."
@@ -270,7 +287,7 @@ void delete(pm_inst * PM_INST, char * name) {
 
 void locate(pm_inst * PM_INST, char * name) {
     int name_len = strlen(name);
-    int found = _entry_in_vault( PM_INST, name, name_len );
+    int found = _entry_in_table( PM_INST, PM_INST->table_name, name );
     if ( found == 2 ) {
         printf("%s:%s found.\n", PM_INST->table_name, name);
         return;
@@ -286,13 +303,14 @@ void locate(pm_inst * PM_INST, char * name) {
     }
 }
 
-void help(pm_inst * PM_INST, char * name) { // only takes these args for ease of calling. ignores them
+// only takes these args for ease of calling. ignores them
+void help(pm_inst * PM_INST, char * name) {
     printf("In production, this is a help page.\n");
 }
 
-int _entry_in_vault(pm_inst * PM_INST, char * name, int name_len) {
+int _entry_in_table(pm_inst * PM_INST, char * tb_name, char * ent_name) {
     char * query = "SELECT VIS FROM % WHERE ID = ?";
-    query = concat(query, 1, PM_INST->table_name);
+    query = concat(query, 1, tb_name);
     int query_len = strlen(query);
 
     sqlite3_stmt * statement;
@@ -301,7 +319,7 @@ int _entry_in_vault(pm_inst * PM_INST, char * name, int name_len) {
     if ( ecode != SQLITE_OK )
         return -1;
 
-    ecode = sqlite3_bind_text(statement, 1, name, name_len, SQLITE_STATIC);
+    ecode = sqlite3_bind_text(statement, 1, ent_name, strlen(ent_name), SQLITE_STATIC);
     if ( ecode != SQLITE_OK )
         return -2;
 
@@ -322,7 +340,7 @@ int _recover_or_forget(pm_inst * PM_INST, char * name, int op ){
         return -1;
     }
     int name_len = strlen(name);
-    int exists = _entry_in_vault(PM_INST, name, name_len);
+    int exists = _entry_in_table(PM_INST, PM_INST->table_name, name);
     if ( exists == 0 ) {
         printf("No entry %s:%s to %s.\n", PM_INST->table_name, name, opstrings[op]);
         return -1;
@@ -389,4 +407,17 @@ int _delete(pm_inst * PM_INST, char * name, int name_len) {
     printf("Del: a backend error prevented the deletion of %s : %s\n", name,
         sqlite3_errmsg(PM_INST->db) );
     return -1;
+}
+
+int _sql_safe_in( char * in ) {
+    if (!in)
+        return 0;
+    if ( in[0] == '_' )
+        return 0;
+    while(in) {
+        unsigned char c = *(in++);
+        if ( c < 48 || ( c > 57 && c < 65 ) || ( c > 90 && c < 97 ) || ( c > 122 ) )
+            return 0;
+    }
+    return 1;
 }

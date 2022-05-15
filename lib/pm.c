@@ -24,12 +24,28 @@ int main( int argc, char * * argv ) {
         printf("Your pm configuration file ( %s ) appears to be empty.\n", argv[1]);
         return -1;
     }
+    // echo, noval, unique key
+    char flags[] = "enu";
+    char opts = 0;
+    char flags_passed = 0;
+
+    if ( argv[argc-1][0] == '-' && strlen(argv[argc-1]) > 1 ) {
+        flags_passed = 1;
+        int i = 0;
+        char c;
+        while((c = argv[argc-1][i++])) {
+            char * l;
+            if (( l = strchr(flags, c) ))
+                 opts |= ( 1 << ( l - flags ) );
+        }
+    }
 
     char * pm_conf_str = malloc(pm_conf_sz+1);
     pm_conf_str[pm_conf_sz] = 0;
     fread( pm_conf_str, 1, pm_conf_sz, pm_conf);
 
-    char * att_names[] = { "cooldown" , "db_path" , "warn", "val", "confirm_cphr" };
+    char * att_names[] = { "cooldown" , "db_path" , "confirm_cphr",
+         "warn", "def_tables"};
     char * * atts = get_atts_conf( pm_conf_str, 5, att_names);
 
     if ( !atts ) {
@@ -37,18 +53,27 @@ int main( int argc, char * * argv ) {
         return -1;
     }
 
-    int cooldown = atoi(atts[0]); // and with 1 to make sure
+    int cooldown = atoi(atts[0]);
     char * db_path = atts[1];
-    char warn = atoi(atts[2]) & 1;
-    char val = atoi(atts[3]) & 1;
-    char confirm_cphr = atoi(atts[4]) & 1;
-    char pout = 0;
 
     if ( cooldown > 600 ) {
         cooldown = 600;
         printf("Maximum configurable cooldown is 600s. Edit your cooldown settings"
             " in %s to avoid seeing this warning in the future", argv[1] );
     }
+
+    sqlite3 * db;
+    if ( sqlite3_open(db_path, &db) != 0 ) {
+        printf("Init: error connecting to database: %s. [ pm chdb ] or edit %s\n",
+            db_path, argv[1]);
+        return -1;
+    }
+    // char conf_opts = 0;
+    for( int i = 2; i < 5; i++) {
+        //printf("%s : %s\n", att_names[i], atts[i]);
+        opts |= ( ( atoi(atts[i]) & 1 ) << ( i + 1) );
+    }
+    free(atts);
 
     if ( hydro_init() != 0 ) {
         printf("Init: error initilizing hydrogen\n");
@@ -58,23 +83,15 @@ int main( int argc, char * * argv ) {
     pm_inst * PM_INST = malloc( sizeof(pm_inst));
     memset(PM_INST, 0, sizeof(pm_inst));
 
+    PM_INST->pm_opts = opts;
     PM_INST->cooldown = cooldown;
-
-    PM_INST->pm_opts = 0 | (confirm_cphr << 2) | ( warn << 1 ) | pout;
-    PM_INST->crypt_opts = 0 | ( val << 1 ) ;
-
-    sqlite3 * db;
-    if ( sqlite3_open(db_path, &db) != 0 ) {
-        printf("Init: error connecting to database: %s. [ pm chdb ] or edit %s\n", db_path, argv[1]);
-        return -1;
-    }
 
     char table_name[] = "test";
     strncpy(PM_INST->table_name, table_name, 15);
 
     PM_INST->db = db;
 
-    cli_main(argc - 2, &argv[2], PM_INST);
+    cli_main(argc - ( 2 + flags_passed ), &argv[2], PM_INST);
 
     //For now, lets avoid creating the guardian process until we're out of early testing
     //int pid = fork();
@@ -106,7 +123,8 @@ int val_pad(char * in) {
     }
     return 0;
 }
-
+// NEEDS TO BE REWORKED: so that values which contain a keyname are not confused
+// with the actual key
 char * * get_atts_conf( char * conf_str, int attc, char * * att_map) {
     if ( !conf_str || !att_map )
         return NULL;

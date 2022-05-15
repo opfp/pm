@@ -105,7 +105,7 @@ int dec_ciphertext( pm_inst * PM_INST ) {
         return 1;
     }
     // derive salt from ciphertext
-    char validate = ( PM_INST->crypt_opts & 1 );
+    char validate = ( ! (PM_INST->pm_opts & 2) );
     uint8_t salt[SALTSIZE];
     memcpy( salt, PM_INST->master_key, SALTSIZE);
 

@@ -34,11 +34,10 @@ typedef struct {
     uint8_t ciphertext[CIPHERSIZE];// (64 + 32 = 96)
     int guardian_pid;
     int cooldown;
-    char crypt_opts; // see idocs for explanation
-    char pm_opts;
+    char pm_opts; // see idocs for explanation
 } pm_inst;
 
-#include "cli.h" 
+#include "cli.h"
 #include "pm.h"
 #include "enc.h"
 
