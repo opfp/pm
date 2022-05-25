@@ -11,9 +11,9 @@ int cli_main( int argc, char * * argv, pm_inst * PM_INST) {
 
     if ( PM_INST->pm_opts & 32 ) { // if defaults only
         if ( PM_INST->pm_opts & 4 ) // if -u
-            memcpy(PM_INST->table_name, def_commkey, 9);
+            memcpy(PM_INST->table_name, def_arbkey, 10);
         else
-            memcpy (PM_INST->table_name, def_arbkey, 10 );
+            memcpy (PM_INST->table_name, def_commkey, 9 );
         if ( argc == 3 ) {
             printf("pm is configured to only use default vaults, but vault specified."\
                 "[ pm chattr def_vaults 0 ] to enable user created vaults.\n");
@@ -21,27 +21,29 @@ int cli_main( int argc, char * * argv, pm_inst * PM_INST) {
     } else if ( argc == 3 ) {
         if ( strlen(argv[1]) > 15 || !_sql_safe_in(argv[1]) ) {
             printf("Disallowed vault name. Must be less than 16 characters, and"\
-                "contain only letters, numbers and _. Cannot begin with _.\n");
+                " contain only letters, numbers and _. Cannot begin with _.\n");
             return -1;
         }
         if ( !_entry_in_table(PM_INST, "_index", argv[1]) ) {
-            printf("No vault named %s.\n", argv[1]);
+            printf("No vault named %s. [pm mkvault] to make a vault.\n", argv[1]);
             return -1;
         }
         strncpy(PM_INST->table_name, argv[1], 15);
+    } else if ( PM_INST->pm_opts & 4 ) {
+        memcpy(PM_INST->table_name, def_arbkey, 10);
     } else {
-        memcpy(PM_INST->table_name, def_commkey, 9);
+        memcpy(PM_INST->table_name, def_commkey, 9 );
     }
 
-    // Code for testing
-    char * option_names[] = { "Echo", "Skip pswd hash val", "Use ukey vault",
-        "Confirm cipertexts" , "Warn on no validation" , "Use only default vaults"};
-    unsigned char opts = PM_INST->pm_opts;
-    for ( int i = 0; i < 6; i++) {
-        printf("%i : %s\n", ( opts & 1 ), option_names[i]);
-        opts = opts >> 1;
-    }
-    // ---
+    //Code for testing
+    // char * option_names[] = { "Echo", "Skip pswd hash val", "Use ukey vault",
+    //     "Confirm cipertexts" , "Warn on no validation" , "Use only default vaults"};
+    // unsigned char opts = PM_INST->pm_opts;
+    // for ( int i = 0; i < 6; i++) {
+    //     printf("%i : %s\n", ( opts & 1 ), option_names[i]);
+    //     opts = opts >> 1;
+    // }
+    //---
 
     char * verbs[] = { "set", "get", "forg", "rec", "del", "loc", "help" };
     char need_name[] = { 1, 1, 1, 1, 1, 1, 0 };
@@ -62,7 +64,7 @@ int cli_main( int argc, char * * argv, pm_inst * PM_INST) {
                     return -1;
                 }
             }
-            (*functions[i])(PM_INST, argv[1]);
+            (*functions[i])(PM_INST, argv[1+(argc==3)]);
         }
     }
     if ( i == verbs_len - 1 )
@@ -125,9 +127,21 @@ void set(pm_inst * PM_INST, char * name) {
     ctxt = NULL;
     memset(context, 0, DATASIZE);
 
-    if ( enc_plaintext(PM_INST) != 0 ) {
-        printf("Set: Error in Enc.\n");
+    int enc_code = enc_plaintext(PM_INST);
+
+    if ( enc_code == -2 ) {
+        printf("Set: Wrong password for vault %s. Use -u to make an arbitrary key entry\n",
+            PM_INST->table_name);
         return; // We're free to just return because we've already destroyed our sensitive data
+    } else if ( enc_code == -4) {
+        printf("Set: Commkey / ukey mismatch. Toggle -u to fix\n");
+        return;
+    } else if ( enc_code == -1) {
+        printf("Set: SQL error: %s\n", sqlite3_errmsg(PM_INST->db) );
+        return;
+    } else if ( enc_code < 0 ) {
+        printf("Set: Unknown error in enc.\n");
+        return;
     }
 
     // Build sqlite3 statement to insert the cipher, validate key etc
@@ -136,13 +150,20 @@ void set(pm_inst * PM_INST, char * name) {
     uint8_t master_key[M_KEYSIZE];
     memset( master_key, 0, M_KEYSIZE);
 
-    int validate = 1;
+    char validate = 0;
     if ( ! (PM_INST->pm_opts & 2) ) { // if not skip validation
         validate = 1;
         memcpy( master_key, PM_INST->master_key + 9, M_KEYSIZE);
     }
 
-    char * query = "INSERT INTO % (ID,SALT,MASTER_KEY,CIPHER,VIS,VALIDATE) VALUES (?,?,?,?,?,?)";
+    char ukey = (PM_INST->pm_opts & 4) >> 2;
+    char * query;
+
+    if ( ukey )
+        query = "INSERT INTO % (ID,SALT,MASTER_KEY,CIPHER,VIS,VALIDATE) VALUES (?,?,?,?,?,?)";
+    else
+        query = "INSERT INTO % (ID,SALT,CIPHER,VIS,VALIDATE) VALUES (?,?,?,?,?)";
+
     query = concat(query, 1, PM_INST->table_name);
     int query_len = strlen(query);
 
@@ -158,13 +179,14 @@ void set(pm_inst * PM_INST, char * name) {
     int binds[6]; // (ID,SALT,MASTER_KEY,CIPHER,VIS,VALIDATE)
     binds[0] = sqlite3_bind_text(stmt_handle, 1, name, name_len, SQLITE_STATIC/*?*/);
     binds[1] = sqlite3_bind_text(stmt_handle, 2, salt, 9, SQLITE_STATIC);
-    binds[2] = sqlite3_bind_blob(stmt_handle, 3, master_key, M_KEYSIZE, SQLITE_STATIC);
-    binds[3] = sqlite3_bind_blob(stmt_handle, 4, PM_INST->ciphertext, DATASIZE +
+    if ( ukey )
+        binds[2] = sqlite3_bind_blob(stmt_handle, 3, master_key, M_KEYSIZE, SQLITE_STATIC);
+    binds[2+ukey] = sqlite3_bind_blob(stmt_handle, 3+ukey, PM_INST->ciphertext, DATASIZE +
         hydro_secretbox_HEADERBYTES, SQLITE_STATIC);
-    binds[4] = sqlite3_bind_int( stmt_handle, 5, 1);
-    binds[5] = sqlite3_bind_int( stmt_handle, 6, validate);
+    binds[3+ukey] = sqlite3_bind_int( stmt_handle, 4+ukey, 1);
+    binds[4+ukey] = sqlite3_bind_int( stmt_handle, 5+ukey, validate);
 
-    for ( int i = 0; i < 6; i++ ) {
+    for ( int i = 0; i < (5+ukey); i++ ) {
         if (binds[i] != SQLITE_OK ) {
             printf("Set: SQL query (%i) binding error %i: %s\n", i, binds[i], sqlite3_errmsg(PM_INST->db));
             return;
@@ -179,19 +201,20 @@ void set(pm_inst * PM_INST, char * name) {
     sqlite3_finalize(stmt_handle);
 
     set_cleanup:
-        if (ctxt)
-            memset(ctxt, 0, strlen(ctxt));
-        if (check)
-            memset(check, 0, strlen(check));
-        // context is always !NULL
-        memset(context, 0, DATASIZE);
+        return;
+        // if (ctxt)
+        //     memset(ctxt, 0, strlen(ctxt));
+        // if (check)
+        //     memset(check, 0, strlen(check));
+        // // context is always !NULL
+        // memset(context, 0, DATASIZE);
 }
 
 void get(pm_inst * PM_INST, char * name) {
     // Check for exists / in trash
     int name_len = strlen(name);
     int exists = _entry_in_table(PM_INST, PM_INST->table_name, name);
-    if ( exists == 0 ) {
+    if ( exists == 0 ) { 
         printf("Get: No entry %s exists in %s. Perhaps look elsewhere? [pm ls-vaults] to list vaults\n",
             name, PM_INST->table_name);
         return;
@@ -199,48 +222,117 @@ void get(pm_inst * PM_INST, char * name) {
         printf("Get: %s is in the trash. [pm rec %s] to recover so the entry may be retreived\n", name, name);
         return;
     }
+    // Check if vault is ukey or commkey
+    char * query2 = "SELECT UKEY, SALT, MASTER_KEY FROM _index WHERE ID = ?";
 
-    char * query = "SELECT SALT, MASTER_KEY, CIPHER, VALIDATE FROM % WHERE ID = ?";
+    int query_len = strlen(query2);
+    sqlite3_stmt * statement2;
+    int ecode = sqlite3_prepare_v2(PM_INST->db, query2, query_len, &statement2, NULL);
+
+    if ( ecode != SQLITE_OK )
+        goto get_sql_fail;
+
+    ecode = sqlite3_bind_text(statement2, 1, PM_INST->table_name, strlen(PM_INST->table_name),
+        SQLITE_STATIC);
+    if ( ecode != SQLITE_OK )
+        goto get_sql_fail;
+
+    ecode = sqlite3_step(statement2);
+    if ( ecode != SQLITE_ROW )
+        goto get_sql_fail;
+
+    char ukey = (char) sqlite3_column_int(statement2, 0) & 1;
+    char * query;
+    int * lens;
+
+    if ( ukey ) {
+        query = "SELECT SALT, MASTER_KEY, CIPHER, VALIDATE FROM % WHERE ID = ?";
+        lens = (int[4]) {SALTSIZE, M_KEYSIZE, CIPHERSIZE, 0};
+    } else {
+        query = "SELECT SALT, CIPHER, VALIDATE FROM % WHERE ID = ?";
+        lens = (int[3]) { SALTSIZE, CIPHERSIZE, 0};
+    }
+
     query = concat(query, 1, PM_INST->table_name);
-    int query_len = strlen(query);
+    query_len = strlen(query);
 
     sqlite3_stmt * statement;
-    int ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &statement, NULL);
+    ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &statement, NULL);
     free(query);
-    if ( ecode != SQLITE_OK ) {
-        printf("Get: SQL query compilation error %i: %s\n", ecode, sqlite3_errmsg(PM_INST->db));
-        return;
-    }
+    if ( ecode != SQLITE_OK )
+        goto get_sql_fail;
 
     ecode = sqlite3_bind_text(statement, 1, name, name_len, SQLITE_STATIC/*?*/);
-    if ( ecode != SQLITE_OK ) {
-        printf("Get: SQL query binding error %i: %s\n", ecode, sqlite3_errmsg(PM_INST->db));
-        return;
-    }
+    if ( ecode != SQLITE_OK )
+        goto get_sql_fail;
 
     ecode = sqlite3_step(statement);
     if ( ecode == SQLITE_DONE ) {
         printf("Get: No entry named: %s\n", name);
         return;
-    } else if ( ecode != SQLITE_ROW ) {
-        printf("Get: SQL query execution error %i: %s\n", ecode, sqlite3_errmsg(PM_INST->db));
-        return;
-    }
+    } else if ( ecode != SQLITE_ROW )
+        goto get_sql_fail;
 
-    //SELECT SALT, MASTER_KEY, CIPHER, VALIDATE
-    int lens[] = {SALTSIZE, M_KEYSIZE, CIPHERSIZE };
-    for ( int i = 0; i < 3; i++ ){
-        if ( sqlite3_column_bytes(statement, i) != lens[i] ) {
-            printf("Get: SQL returned a malformed object at column %i\n", i );
+    int i = 0;
+    while ( lens[i] ) {
+        ecode = sqlite3_column_bytes(statement, i);
+        if ( ecode != lens[i] ) {
+            printf("Get: SQL returned a malformed object at column %i. Expected:"
+                " %i, returned: %i bytes.\n", i, lens[i], ecode );
+            return;
         }
+        i++;
     }
-
-    char entry_val = (char) sqlite3_column_int(statement, 3);
 
     memcpy( PM_INST->master_key, sqlite3_column_text(statement, 0) , SALTSIZE);
-    if ( entry_val )
-        memcpy( PM_INST->master_key + SALTSIZE, sqlite3_column_text(statement, 1) , M_KEYSIZE);
-    memcpy( PM_INST->ciphertext, sqlite3_column_text(statement, 2) , CIPHERSIZE);
+    memcpy( PM_INST->ciphertext, sqlite3_column_text(statement, (1+ukey) ) , CIPHERSIZE);
+
+    char prompt[] = "Get: Enter the passphrase you used to encrypt your entry:\n";
+    char * pswd = getpass(prompt);
+    int pswd_len = strlen(pswd);
+
+    if ( pswd_len >= DATASIZE ){
+        printf("Get: pm is configured to accept passphrases up to %i characters \
+            long. Your entry was too long. See [YOUR CONF FILE]\n", DATASIZE );
+        goto get_cleanup;
+    } else if ( pswd_len == 0 ) {
+        printf("Get: no passphrases entered\n");
+        goto get_cleanup;
+    }
+
+    memcpy( PM_INST->plaintext, pswd, DATASIZE);
+    memset(pswd, 0, pswd_len);
+
+    char entry_val = (char) sqlite3_column_int(statement, 2+ukey);
+    if ( entry_val && ukey ) {
+        memcpy( PM_INST->master_key + SALTSIZE, sqlite3_column_text(statement, 1),
+            M_KEYSIZE);
+    } else if ( entry_val ) {
+        // if comkey, check against masterkey from _index query, then turn off val
+        // so dec doesnt try to val with wrong salt
+        char c_mkey[M_KEYSIZE+1] = {0};
+        char c_salt[SALTSIZE+1] = {0};
+
+        memcpy(c_mkey, sqlite3_column_text(statement2, 2), M_KEYSIZE);
+        memcpy(c_salt, sqlite3_column_text(statement2, 1), SALTSIZE);
+
+        char * r_mkey =  crypt(PM_INST->plaintext, c_salt);
+
+        if ( strcmp(c_mkey, r_mkey /*+ SALTSIZE, M_KEYSIZE*/ ) ) {
+            printf("Invalid passphrase (newcheck)\n");
+            // printf("c_mkey:\n");
+            // for ( int i = 0; i < SALTSIZE + M_KEYSIZE; i++ ) {
+            //     printf("[%u]", c_mkey[i]);
+            // }
+            // printf("\nr_mkey:\n");
+            // for ( int i = 0; i < SALTSIZE + M_KEYSIZE; i++ ) {
+            //     printf("[%u]", r_mkey[i]);
+            // }
+            return;
+        }
+        // turn off val
+        PM_INST->pm_opts |= 2;
+    }
 
     if ( !entry_val ) {
         PM_INST->pm_opts |= 2; //Add flag at 2^1 bit (don't validate result)
@@ -259,6 +351,12 @@ void get(pm_inst * PM_INST, char * name) {
     }
 
     printf("Retreived: %s:%s : %s\n", PM_INST->table_name, name, PM_INST->plaintext);
+    get_cleanup:
+        memset(PM_INST, 0, sizeof(pm_inst));
+        return;
+    get_sql_fail:
+        printf("Get: SQL query compilation/execution error %i: %s\n", ecode,
+            sqlite3_errmsg(PM_INST->db));
 }
 
 void forget(pm_inst * PM_INST, char * name) {
@@ -317,20 +415,24 @@ int _entry_in_table(pm_inst * PM_INST, char * tb_name, char * ent_name) {
     int ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &statement, NULL);
     free(query);
     if ( ecode != SQLITE_OK )
-        return -1;
+        goto eit_sql_fail;
 
     ecode = sqlite3_bind_text(statement, 1, ent_name, strlen(ent_name), SQLITE_STATIC);
     if ( ecode != SQLITE_OK )
-        return -2;
+        goto eit_sql_fail;
 
     ecode = sqlite3_step(statement);
     if ( ecode == SQLITE_DONE )
         return 0;
     else if ( ecode != SQLITE_ROW )
-        return -3;
+        goto eit_sql_fail;
 
     ecode = sqlite3_column_int(statement, 0);
     return ecode + 1;
+
+    eit_sql_fail:
+        printf("Entry in Table: SQL Error: %s\n", sqlite3_errmsg(PM_INST->db) );
+        return 0;
 }
 
 int _recover_or_forget(pm_inst * PM_INST, char * name, int op ){
@@ -410,14 +512,15 @@ int _delete(pm_inst * PM_INST, char * name, int name_len) {
 }
 
 int _sql_safe_in( char * in ) {
+    unsigned char c;
     if (!in)
         return 0;
     if ( in[0] == '_' )
         return 0;
-    while(in) {
-        unsigned char c = *(in++);
-        if ( c < 48 || ( c > 57 && c < 65 ) || ( c > 90 && c < 97 ) || ( c > 122 ) )
+    while(( c = *in++ )) {
+        if ( c < 48 || ( c > 57 && c < 65 ) || ( c > 90 && c < 97 ) || ( c > 122 ) ) {
             return 0;
+        }
     }
     return 1;
 }

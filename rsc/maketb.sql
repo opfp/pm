@@ -1,9 +1,18 @@
+DROP TABLE _index ;
+DROP TABLE _main_cmk;
+DROP TABLE _main_ukey;
+
 CREATE TABLE _index ( /* no confusion with vaults because _ not allowed as vaultname[0] */
-    TB_NAME CHAR(15) PRIMARY KEY,
+    ID CHAR(15) PRIMARY KEY,
+    SALT CHAR(9),
     MASTER_KEY BINARY(23),
-    COMMKEY TINYINT,
+    UKEY TINYINT,
     VIS TINYINT
 );
+
+INSERT INTO _index (ID, UKEY, VIS)
+    VALUES ("_main_cmk", 2, 1),
+    ("_main_ukey", 1, 1);
 
 CREATE TABLE _main_cmk (
     ID CHAR(32) PRIMARY KEY,

@@ -1,6 +1,6 @@
-PM Beta .20
+PM Alpha .20
 
 Added new invocation protocol, including a configuration file. Now, pm is called
     via a shell script which passes the path to a .conf file to pm.c:main. The
     path to pm's underlying database is contained in the .conf, which also includes
-    options which customize encryption and user interface.  
+    options which customize encryption and user interface.
