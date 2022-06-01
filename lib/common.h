@@ -24,6 +24,7 @@
 #include "hydrogen.h" // Need?
 #include "sqlite3.h"
 #include "o_str.h"
+#include "pmsql.h" 
 
 typedef struct {
     sqlite3 * db;

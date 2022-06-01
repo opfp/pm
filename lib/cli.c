@@ -155,53 +155,50 @@ void set(pm_inst * PM_INST, char * name) {
         validate = 1;
         memcpy( master_key, PM_INST->master_key + 9, M_KEYSIZE);
     }
+    // bruh this turned out to be the same length
+    char * query;
+    void * data;
+    int * data_sz;
+    int * data_tp;
 
     char ukey = (PM_INST->pm_opts & 4) >> 2;
-    char * query;
-
-    if ( ukey )
+    if ( ukey ) {
         query = "INSERT INTO % (ID,SALT,MASTER_KEY,CIPHER,VIS,VALIDATE) VALUES (?,?,?,?,?,?)";
-    else
+        data = (void *[6]) { name, salt, master_key, PM_INST->ciphertext, 1, validate };
+        data_sz = (int [6]) { 0, 0, M_KEYSIZE, CIPHERSIZE, 0, 0 };
+        data_tp = (int [6]) { PMSQL_TEXT, PMSQL_TEXT, PMSQL_BLOB, PMSQL_BLOB,
+            PMSQL_INT, PMSQL_INT };
+    } else {
         query = "INSERT INTO % (ID,SALT,CIPHER,VIS,VALIDATE) VALUES (?,?,?,?,?)";
+        data = (void *[5]) { name, salt, PM_INST->ciphertext, 1, validate };
+        data_sz = (int [5]) { 0, 0, CIPHERSIZE, 0, 0 };
+        data_tp = (int [5]) { PMSQL_TEXT, PMSQL_TEXT, PMSQL_BLOB, PMSQL_INT, PMSQL_INT};
+    }
 
     query = concat(query, 1, PM_INST->table_name);
     int query_len = strlen(query);
 
-    sqlite3_stmt * stmt_handle;
-    int ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &stmt_handle, NULL);
-    free(query);
-
-    if ( ecode != SQLITE_OK ) {
-        printf("Set: SQL query compilation error: %s\n", sqlite3_errmsg(PM_INST->db));
+    sqlite3_stmt * stmt;
+    pmsql_stmt pmsql = { SQLITE_STATIC, PM_INST->db, stmt, NULL };
+    int ecode = pmsql_compile( &pmsql, query, 5+ukey, data, data_sz, data_tp );
+    if ( ecode < 0 ) {
+        printf("Set: pmsql error during binding (SQLITE : %i ) : %s\n", (-1 * ecode ) ,
+            pmsql.pmsql_error );
+        return;
+    } else if ( ecode > 0 ) {
+        printf("Set: sql error %i during binding: %s\n", ecode, sqlite3_errmsg(PM_INST->db) );
         return;
     }
-    // Bind real values to compiled parameterized query
-    int binds[6]; // (ID,SALT,MASTER_KEY,CIPHER,VIS,VALIDATE)
-    binds[0] = sqlite3_bind_text(stmt_handle, 1, name, name_len, SQLITE_STATIC/*?*/);
-    binds[1] = sqlite3_bind_text(stmt_handle, 2, salt, 9, SQLITE_STATIC);
-    if ( ukey )
-        binds[2] = sqlite3_bind_blob(stmt_handle, 3, master_key, M_KEYSIZE, SQLITE_STATIC);
-    binds[2+ukey] = sqlite3_bind_blob(stmt_handle, 3+ukey, PM_INST->ciphertext, DATASIZE +
-        hydro_secretbox_HEADERBYTES, SQLITE_STATIC);
-    binds[3+ukey] = sqlite3_bind_int( stmt_handle, 4+ukey, 1);
-    binds[4+ukey] = sqlite3_bind_int( stmt_handle, 5+ukey, validate);
 
-    for ( int i = 0; i < (5+ukey); i++ ) {
-        if (binds[i] != SQLITE_OK ) {
-            printf("Set: SQL query (%i) binding error %i: %s\n", i, binds[i], sqlite3_errmsg(PM_INST->db));
-            return;
-        }
-    }
-
-    int eval = sqlite3_step(stmt_handle); //Execute the statement
+    int eval = sqlite3_step(pmsql.stmt); //Execute the statement
     if ( eval != SQLITE_DONE ) {
         printf("Set: SQL query evaluation error %i: %s\n", eval, sqlite3_errmsg(PM_INST->db));
         return;
     }
-    sqlite3_finalize(stmt_handle);
+    sqlite3_finalize(pmsql.stmt);
 
     set_cleanup:
-        return;
+        return; // below were causing seggy fault
         // if (ctxt)
         //     memset(ctxt, 0, strlen(ctxt));
         // if (check)
@@ -214,7 +211,7 @@ void get(pm_inst * PM_INST, char * name) {
     // Check for exists / in trash
     int name_len = strlen(name);
     int exists = _entry_in_table(PM_INST, PM_INST->table_name, name);
-    if ( exists == 0 ) { 
+    if ( exists == 0 ) {
         printf("Get: No entry %s exists in %s. Perhaps look elsewhere? [pm ls-vaults] to list vaults\n",
             name, PM_INST->table_name);
         return;
@@ -222,78 +219,84 @@ void get(pm_inst * PM_INST, char * name) {
         printf("Get: %s is in the trash. [pm rec %s] to recover so the entry may be retreived\n", name, name);
         return;
     }
-    // Check if vault is ukey or commkey
-    char * query2 = "SELECT UKEY, SALT, MASTER_KEY FROM _index WHERE ID = ?";
-
-    int query_len = strlen(query2);
-    sqlite3_stmt * statement2;
-    int ecode = sqlite3_prepare_v2(PM_INST->db, query2, query_len, &statement2, NULL);
-
-    if ( ecode != SQLITE_OK )
-        goto get_sql_fail;
-
-    ecode = sqlite3_bind_text(statement2, 1, PM_INST->table_name, strlen(PM_INST->table_name),
-        SQLITE_STATIC);
-    if ( ecode != SQLITE_OK )
-        goto get_sql_fail;
-
-    ecode = sqlite3_step(statement2);
-    if ( ecode != SQLITE_ROW )
-        goto get_sql_fail;
-
-    char ukey = (char) sqlite3_column_int(statement2, 0) & 1;
+    // These will be used for our calls to the pmsql functions
     char * query;
-    int * lens;
+    void * * data;
+    int * data_tp;
+    int * data_sz;
+    sqlite3 * stmt;
+    pmsql_stmt * pmsql;
+    int ecode = 0;
+
+    // query to index to get meta / val data for this entry
+    query = "SELECT UKEY, SALT, MASTER_KEY FROM _index WHERE ID = ?";
+    data = ( void * [1] ) {PM_INST->table_name};
+    data_tp = ( int [1] ) { PMSQL_TEXT };
+    pmsql = &(pmsql_stmt) { SQLITE_STATIC, PM_INST->db, stmt, NULL };
+
+    if (( ecode = pmsql_compile( pmsql, query, 1, data, NULL, data_tp ) )) {
+        goto get_sql_fail;
+    }
+    ecode = sqlite3_step(pmsql->stmt);
+    if ( ecode != SQLITE_ROW ) {
+        goto get_sql_fail;
+    } // get results from query
+    int ukey;
+    char i_salt[SALTSIZE];
+    char i_mkey[M_KEYSIZE];
+
+    data = ( void * [3] ) { &ukey, &i_salt, &i_mkey };
+    data_sz = ( int[3] ) { 0, (-1 * SALTSIZE), ( -1 * M_KEYSIZE ) };
+    data_tp = ( int[3] ) { PMSQL_INT, PMSQL_BLOB, PMSQL_BLOB };
+
+    if (( ecode = pmsql_read( pmsql, 3, data, data_sz, data_tp )) ) {
+        goto get_sql_fail;
+    }
+
+    ukey &= 1;
+    char entry_val;
+
+    if ( ukey )
+        query = "SELECT SALT, MASTER_KEY, CIPHER, VALIDATE FROM % WHERE ID = ?";
+    else
+        query = "SELECT SALT, CIPHER, VALIDATE FROM % WHERE ID = ?";
+
+    data_tp = ( int[1] ) { PMSQL_TEXT };
+    data = ( char * [1] ) { name };
+    // removing concat dependency later
+    query = concat(query, 1, PM_INST->table_name);
+    int query_len = strlen(query);
+    //---
+    if (( ecode = pmsql_compile( pmsql, query, 1, data, NULL, data_tp ) )) {
+        goto get_sql_fail;
+    }
+    //---
+    ecode = sqlite3_step(pmsql->stmt);
+    if ( ecode != SQLITE_ROW ) {
+        goto get_sql_fail;
+    }
 
     if ( ukey ) {
-        query = "SELECT SALT, MASTER_KEY, CIPHER, VALIDATE FROM % WHERE ID = ?";
-        lens = (int[4]) {SALTSIZE, M_KEYSIZE, CIPHERSIZE, 0};
+        data_tp = ( int[4] ) { PMSQL_BLOB, PMSQL_BLOB, PMSQL_BLOB, PMSQL_INT };
+        data = ( void * [4] ) { PM_INST->master_key, PM_INST->master_key+SALTSIZE,
+            PM_INST->ciphertext, &entry_val };
+        data_sz = ( int[4] ) {SALTSIZE, M_KEYSIZE, CIPHERSIZE, 0};
     } else {
-        query = "SELECT SALT, CIPHER, VALIDATE FROM % WHERE ID = ?";
-        lens = (int[3]) { SALTSIZE, CIPHERSIZE, 0};
+        data = ( void * [3] ) { PM_INST->master_key, PM_INST->ciphertext, &entry_val };
+        data_sz = ( int[3] ) { SALTSIZE, CIPHERSIZE, 0};
+        data_tp = ( int[3] ) { PMSQL_BLOB, PMSQL_BLOB, PMSQL_INT };
     }
-
-    query = concat(query, 1, PM_INST->table_name);
-    query_len = strlen(query);
-
-    sqlite3_stmt * statement;
-    ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &statement, NULL);
-    free(query);
-    if ( ecode != SQLITE_OK )
+    if (( ecode = pmsql_read(pmsql, 3+ukey, data, data_sz, data_tp) )) {
         goto get_sql_fail;
-
-    ecode = sqlite3_bind_text(statement, 1, name, name_len, SQLITE_STATIC/*?*/);
-    if ( ecode != SQLITE_OK )
-        goto get_sql_fail;
-
-    ecode = sqlite3_step(statement);
-    if ( ecode == SQLITE_DONE ) {
-        printf("Get: No entry named: %s\n", name);
-        return;
-    } else if ( ecode != SQLITE_ROW )
-        goto get_sql_fail;
-
-    int i = 0;
-    while ( lens[i] ) {
-        ecode = sqlite3_column_bytes(statement, i);
-        if ( ecode != lens[i] ) {
-            printf("Get: SQL returned a malformed object at column %i. Expected:"
-                " %i, returned: %i bytes.\n", i, lens[i], ecode );
-            return;
-        }
-        i++;
     }
-
-    memcpy( PM_INST->master_key, sqlite3_column_text(statement, 0) , SALTSIZE);
-    memcpy( PM_INST->ciphertext, sqlite3_column_text(statement, (1+ukey) ) , CIPHERSIZE);
 
     char prompt[] = "Get: Enter the passphrase you used to encrypt your entry:\n";
     char * pswd = getpass(prompt);
     int pswd_len = strlen(pswd);
 
     if ( pswd_len >= DATASIZE ){
-        printf("Get: pm is configured to accept passphrases up to %i characters \
-            long. Your entry was too long. See [YOUR CONF FILE]\n", DATASIZE );
+        printf("Get: pm is configured to accept passphrases up to %i characters"\
+            "long. Your entry was too long. See [YOUR CONF FILE]\n", DATASIZE );
         goto get_cleanup;
     } else if ( pswd_len == 0 ) {
         printf("Get: no passphrases entered\n");
@@ -303,38 +306,17 @@ void get(pm_inst * PM_INST, char * name) {
     memcpy( PM_INST->plaintext, pswd, DATASIZE);
     memset(pswd, 0, pswd_len);
 
-    char entry_val = (char) sqlite3_column_int(statement, 2+ukey);
-    if ( entry_val && ukey ) {
-        memcpy( PM_INST->master_key + SALTSIZE, sqlite3_column_text(statement, 1),
-            M_KEYSIZE);
-    } else if ( entry_val ) {
+    if ( entry_val && !ukey ) {
         // if comkey, check against masterkey from _index query, then turn off val
         // so dec doesnt try to val with wrong salt
-        char c_mkey[M_KEYSIZE+1] = {0};
-        char c_salt[SALTSIZE+1] = {0};
-
-        memcpy(c_mkey, sqlite3_column_text(statement2, 2), M_KEYSIZE);
-        memcpy(c_salt, sqlite3_column_text(statement2, 1), SALTSIZE);
-
-        char * r_mkey =  crypt(PM_INST->plaintext, c_salt);
-
-        if ( strcmp(c_mkey, r_mkey /*+ SALTSIZE, M_KEYSIZE*/ ) ) {
-            printf("Invalid passphrase (newcheck)\n");
-            // printf("c_mkey:\n");
-            // for ( int i = 0; i < SALTSIZE + M_KEYSIZE; i++ ) {
-            //     printf("[%u]", c_mkey[i]);
-            // }
-            // printf("\nr_mkey:\n");
-            // for ( int i = 0; i < SALTSIZE + M_KEYSIZE; i++ ) {
-            //     printf("[%u]", r_mkey[i]);
-            // }
+        if ( strcmp(i_mkey, crypt(PM_INST->plaintext, i_salt) ) ) {
+            printf("Get: Wrong password for vault %s. Use -u to make an arbitrary key entry\n",
+                PM_INST->table_name);
             return;
         }
         // turn off val
         PM_INST->pm_opts |= 2;
-    }
-
-    if ( !entry_val ) {
+    } else {
         PM_INST->pm_opts |= 2; //Add flag at 2^1 bit (don't validate result)
         if ( PM_INST->pm_opts & 16 ) { // if warn
             printf("Warning: decryption validation disabled. PM will be unable to verify\
@@ -355,8 +337,11 @@ void get(pm_inst * PM_INST, char * name) {
         memset(PM_INST, 0, sizeof(pm_inst));
         return;
     get_sql_fail:
-        printf("Get: SQL query compilation/execution error %i: %s\n", ecode,
-            sqlite3_errmsg(PM_INST->db));
+        if ( ecode < 0 )
+            printf("Get: pmsql error during binding : %s\n", pmsql->pmsql_error );
+        else if ( ecode > 0 )
+            printf("Get: sql error during binding: %s\n", sqlite3_errmsg(PM_INST->db) );
+        return;
 }
 
 void forget(pm_inst * PM_INST, char * name) {
@@ -369,7 +354,7 @@ void recover(pm_inst * PM_INST, char * name) {
 
 void delete(pm_inst * PM_INST, char * name) {
     int name_len = strlen(name);
-    if ( _entry_in_table(PM_INST, PM_INST->table_name, name) == 0 ) {
+    if ( ! _entry_in_table(PM_INST, PM_INST->table_name, name) ) {
         printf("Del: no entry to delete\n");
     }
     printf("This will permanently delete %s. This action cannot be undone."

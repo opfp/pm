@@ -12,7 +12,8 @@ CREATE TABLE _index ( /* no confusion with vaults because _ not allowed as vault
 
 INSERT INTO _index (ID, UKEY, VIS)
     VALUES ("_main_cmk", 2, 1),
-    ("_main_ukey", 1, 1);
+    ("_main_ukey", 1, 1),
+    ("test", 1, 1);
 
 CREATE TABLE _main_cmk (
     ID CHAR(32) PRIMARY KEY,

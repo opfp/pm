@@ -52,7 +52,6 @@ int enc_plaintext( pm_inst * PM_INST ) {
     if ( ukey != (PM_INST->pm_opts & 4 ) >> 2 )
         return -4; // commkey / ukey mismatch
 
-
     // if comkey, check entered pswd for equality
     // but if first commkey, we can't
     if ( !ukey && !first_commkey ) {
