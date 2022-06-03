@@ -1,82 +1,66 @@
 #include "enc.h"
 
-/* @ssert enc_plaintext
-    PM_INST . enc_flags
-    have been set
-*/
 int enc_plaintext( pm_inst * PM_INST ) {
-    // if ( PM_INST->key_write_time != 0 ) {  //check if we are in the key_cooldown period
-    //     //kill(PM_INST->guardian_pid, 10); // Send sleep signal so guardian doesnt interfere
-    //     hydro_secretbox_encrypt(PM_INST->ciphertext, PM_INST->plaintext,
-    //         strlen(PM_INST->plaintext), 0, CONTEXT, PM_INST->derived_key);
-    //     return;
-    // }
-    // Else derive keys and then enc
+    int ecode = 0; // these need to always be defined so cleanup never refs undeclared vars
+    sqlite3_stmt * stmt;
+    pmsql_stmt pmsql = { SQLITE_STATIC, PM_INST->db, stmt, NULL };
+
     char prompt[] = "Enter passphrase to encrypt your entry:\n";
     char * pswd = getpass(prompt);
+    char * m_key;
     int pswd_len = strlen(pswd);
 
     if ( pswd_len >= DATASIZE ){ //this will literally NEVER happen. see man getpass()
         printf("Enc: pm is configured to accept passphrases up to %i characters\
             long. Your entry was too long. See [YOUR CONF FILE]\n", DATASIZE );
-        return -5;
+        ecode = -5;
+        goto enc_cleanup;
     } else if ( pswd_len == 0 ) {
         printf("Enc: no passphrase entered\n");
-        return -5;
+        ecode = -5;
+        goto enc_cleanup;
     }
 
     if ( ! _entry_in_table(PM_INST, "_index" , PM_INST->table_name) ) { // if no entry
-        return -3; // No vault with such a name
+        ecode = -3; // No vault with such a name
+        goto enc_cleanup;
     }
 
+    void * * data = ( void * [1] ) { PM_INST->table_name };
+    int * data_tp = ( int [1] ) { PMSQL_TEXT };
     char * query = "SELECT UKEY, SALT, MASTER_KEY FROM _index WHERE ID = ?";
-    sqlite3_stmt * statement;
-    int ecode = sqlite3_prepare_v2(PM_INST->db, query, strlen(query),
-        &statement, NULL);
-    if ( ecode != SQLITE_OK )
-        return -1;
 
-    ecode = sqlite3_bind_text(statement, 1, PM_INST->table_name,
-        strlen(PM_INST->table_name), SQLITE_STATIC/*?*/);
-    if ( ecode != SQLITE_OK )
-        return -1;
+    if (( ecode = pmsql_compile(&pmsql, query, 1, data, NULL, data_tp) ))
+        goto enc_sql_fail;
 
-    ecode = sqlite3_step(statement);
+    ecode = sqlite3_step(pmsql.stmt);
     if ( ecode != SQLITE_ROW )
-        return -1;
+        goto enc_sql_fail;
+    //---
+    int ukey;
+    char i_salt[SALTSIZE];
+    char i_mkey[M_KEYSIZE];
+    data = ( void * [3] ) { &ukey, i_salt, i_mkey };
+    int * data_sz = ( int [3] ) { 0, ( -1 * SALTSIZE ), ( -1 * M_KEYSIZE ) };
+    data_tp = ( int [3] ) { PMSQL_INT, PMSQL_BLOB, PMSQL_BLOB };
 
-    int ukey = sqlite3_column_int(statement, 0);
+    if (( ecode = pmsql_read(&pmsql, 3, data, data_sz, data_tp) ))
+        goto enc_sql_fail;
+    //---
     char first_commkey = ukey & 2;
     ukey &= 1;
 
-    if ( ukey != (PM_INST->pm_opts & 4 ) >> 2 )
-        return -4; // commkey / ukey mismatch
-
-    // if comkey, check entered pswd for equality
-    // but if first commkey, we can't
-    if ( !ukey && !first_commkey ) {
-        int lens[] = { SALTSIZE, M_KEYSIZE };
-        char check_salt[SALTSIZE+1] = {0};
-        char check_mkey[M_KEYSIZE+1] = {0};
-        char * res_buffs[] = { check_salt, check_mkey };
-
-        for ( int i = 0; i < 2; i++ ) {
-            if (sqlite3_column_bytes(statement, i+1) != lens[i] ) {
-                printf("len mismatch row %i : %i != %i\n", i,
-                    sqlite3_column_bytes(statement, i+1), lens[i] );
-                return -1;
-            }
-            memcpy(res_buffs[i], sqlite3_column_text(statement,i+1), lens[i] );
-            //res_buffs[lens[i]] = 0;
-        }
-
-        if ( strcmp(check_mkey, crypt(pswd, check_salt) /*+SALTSIZE, M_KEYSIZE*/) ) // if not equal
-            return -2;
+    if ( ukey != (PM_INST->pm_opts & 4 ) >> 2 ) {
+        ecode = -4; // commkey / ukey mismatch
+        goto enc_cleanup;
     }
-
+    // if comkey, check entered pswd for equality
+    if ( !ukey && !first_commkey && strcmp(i_mkey, crypt(pswd, i_salt)) ) {
+        ecode = -2; // wrong pswd for commkey vault
+        goto enc_cleanup;
+    }
     // Derive master key with crypt()
     char salt[] = "_$345678$";
-
     srandom(mix( clock(), time(NULL), getpid() ));
     unsigned long raw_salt = random();
     raw_salt = raw_salt << 32;
@@ -96,65 +80,49 @@ int enc_plaintext( pm_inst * PM_INST ) {
         salt[i] = t;
     }
     // even in commkey vaults, a seperate salt is maintained for each entry for enhanced security
-    char * m_key = crypt(pswd, salt);
+    m_key = crypt(pswd, salt);
     strncpy( PM_INST->master_key, m_key, SALTSIZE + M_KEYSIZE);
 
     if ( first_commkey ) {
-        char * query2 = "UPDATE _index SET (UKEY, SALT, MASTER_KEY) = (0,?,?) WHERE ID = ?";
+        query = "UPDATE _index SET (UKEY, SALT, MASTER_KEY) = (0,?,?) WHERE ID = ?";
+        data = ( void * [3] ) { salt, m_key, PM_INST->table_name };
+        data_tp = ( int [3] ) { PMSQL_BLOB, PMSQL_BLOB, PMSQL_TEXT };
+        data_sz = ( int[3] ) { SALTSIZE, M_KEYSIZE, 0};
 
-        ecode = sqlite3_prepare_v2(PM_INST->db, query2, strlen(query2),
-            &statement, NULL);
-        if ( ecode != SQLITE_OK )
-            return -1;
+        if (( ecode = pmsql_compile(&pmsql, query, 3, data, data_sz, data_tp) ))
+            goto enc_sql_fail;
 
-        int ecodes[3];
-        ecodes[0] = sqlite3_bind_text(statement, 1, salt, SALTSIZE, SQLITE_STATIC);
-        ecodes[1] = sqlite3_bind_text(statement, 2, m_key, M_KEYSIZE, SQLITE_STATIC);
-        ecodes[2] = sqlite3_bind_text(statement, 3, PM_INST->table_name,
-            strlen( PM_INST->table_name), SQLITE_STATIC);
-
-        if ( ecodes[0] != SQLITE_OK || ecodes[1] != SQLITE_OK || ecodes[2] != SQLITE_OK )
-            return -1;
-
-        ecode = sqlite3_step(statement);
+        ecode = sqlite3_step(pmsql.stmt);
         if ( ecode != SQLITE_DONE )
-            return -1;
+            goto enc_sql_fail;
     }
-
-    sqlite3_finalize(statement);
-
-    /*
-        EVENTUALLY master_key and derived_key will not be stored in an instance of pm,
-        but rather by the guardian process, which will auto-destroy them after a
-        configurable cooldown time not greater than 1 hour. PM_INST will instead
-        hold a pointer to both keys ( which are in guradian heap memory ), and will
-        keep track of weather guardain is running ( has stored keys ), or not.
-    */
-
     // derive derived key
     hydro_pwhash_deterministic(PM_INST->derived_key, I_KEYSIZE, pswd, pswd_len,
         CONTEXT, PM_INST->master_key, OPSLIMIT, MEMLIMIT, THREADS);
-    // Destroy password, and our copy of m_key
-    int j = 0;
-    while(pswd[j++] != 0) {
-        pswd[j] = 0;
-    }
-    j = 0;
-    while( m_key[j++] != 0 ) {
-        m_key[j] = 0;
-    }
     // Enc plaintext and return
-
     hydro_secretbox_encrypt(PM_INST->ciphertext, PM_INST->plaintext,
         strlen(PM_INST->plaintext), 0, CONTEXT, PM_INST->derived_key);
 
-    return 0; // to tell cli weather to add entry to index
+    ecode = 0; // to tell cli weather to add entry to index
+    goto enc_cleanup;
+
+    enc_sql_fail:
+        if ( ecode > 0 )
+            ecode = -1;
+        else {
+            printf("PMSQL: %s\n", pmsql.pmsql_error );
+            ecode = -3;
+        }
+    enc_cleanup:; //Destroy sensitive data
+        sqlite3_finalize(pmsql.stmt);
+        if ( pswd )
+            memset(pswd, 0, strlen(pswd) );
+        if ( m_key )
+            memset(m_key, 0, strlen(m_key) );
+        memset(PM_INST->plaintext, 0, DATASIZE);
+        return ecode;
 }
 
-/* @ssert: dec_ciphertext
-    PM_INST -> master_key , dec_flags
-    have been set
-*/
 int dec_ciphertext( pm_inst * PM_INST ) {
     //char plaintext[DATASIZE];
     // if ( PM_INST->guardain_pid != 0 ) {  //check if we are in the key_cooldown period
@@ -222,7 +190,6 @@ int dec_ciphertext( pm_inst * PM_INST ) {
     // Destroy our copy of user_derived_key, passwd
     memset( user_derived_key, 0, strlen(user_derived_key));
     //memset( PM_INST->plaintext, 0, pswd_len );
-
     return 0;
 }
 
@@ -239,13 +206,3 @@ unsigned long mix(unsigned long a, unsigned long b, unsigned long c) {
     c=c-a;  c=c-b;  c=c^(b >> 15);
     return c;
 }
-
-// printf("\nDerived Key: ");
-// for( int i = 0; i < I_KEYSIZE; i++ ) {
-//     printf("[%u]", PM_INST->derived_key[i]);
-// }
-// printf("\nCiphertext: ");
-// for( int i = 0; i < CIPHERSIZE; i++ ) {
-//     printf("[%u]", PM_INST->ciphertext[i]);
-// }
-// printf("\n");

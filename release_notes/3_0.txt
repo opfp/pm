@@ -2,6 +2,6 @@ PM Alpha .30
 
 PM Alpha .3 adds multiple vaults with two encryption settings, common key,
     (commkey) and unique key (ukey). With this comes three new commands, ls-vaults
-    to list vaults, mkvault to create vaults, and delvault to delete. The -u flag
+    to list vaults, mkvault to create vaults, and rmvault to remove. The -u flag
     is used to access and work with ukey vaults, however it is not required when
-    acessing user defined vaults which are unique key. 
+    acessing user defined vaults which are unique key.

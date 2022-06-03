@@ -31,7 +31,7 @@ int pmsql_compile(pmsql_stmt * base_stmt, char * query, int num_binds,
     ret = sqlite3_prepare_v2(base_stmt->db, query, strlen(query)+1,
         &base_stmt->stmt, NULL);
     if ( ret != SQLITE_OK ) {
-        printf("%s\n", query); 
+        printf("%s\n", query);
         error = "Statement preperation error.";
         ret *= -1;
         goto pmsql_compile_reterr;
@@ -54,7 +54,7 @@ int pmsql_compile(pmsql_stmt * base_stmt, char * query, int num_binds,
             goto pmsql_compile_reterr;
         }
     }
-    //---
+    //--
     for ( int i = 0; i < num_binds; i++ ) {
         if ( bind_res[i] != SQLITE_OK ) {
             ret = -1 * bind_res[i] ;
@@ -63,6 +63,7 @@ int pmsql_compile(pmsql_stmt * base_stmt, char * query, int num_binds,
         }
     }
     free(bind_res);
+    //---
     return 0;
     pmsql_compile_reterr:;
         int elen = strlen(error);
@@ -103,6 +104,7 @@ int pmsql_read(pmsql_stmt * base_stmt, int num_rows, void * * buffs,
             goto pmsql_read_reterr;
         }
     }
+    //---
     // do read
     for ( int i = 0; i < num_rows; i++ ) {
         if ( buff_lens_cpy[i] < 0 )
@@ -127,3 +129,17 @@ int pmsql_read(pmsql_stmt * base_stmt, int num_rows, void * * buffs,
         base_stmt->pmsql_error[elen] = 0;
         return ret;
     }
+
+int pmsql_safe_in( char * in ) {
+    unsigned char c;
+    if (!in)
+        return 0;
+    if ( in[0] == '_' )
+        return 0;
+    while(( c = *in++ )) {
+        if ( c < 48 || ( c > 57 && c < 65 ) || ( c > 90 && c < 97 ) || ( c > 122 ) ) {
+            return 0;
+        }
+    }
+    return 1;
+}

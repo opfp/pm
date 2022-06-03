@@ -16,5 +16,6 @@ typedef struct {
 
 int pmsql_compile( pmsql_stmt *, char *, int, void * *, int *, int * );
 int pmsql_read(pmsql_stmt *, int, void * *, int *, int * );
+int pmsql_safe_in(char *); 
 
 #endif

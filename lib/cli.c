@@ -19,7 +19,7 @@ int cli_main( int argc, char * * argv, pm_inst * PM_INST) {
                 "[ pm chattr def_vaults 0 ] to enable user created vaults.\n");
         }
     } else if ( argc == 3 ) {
-        if ( strlen(argv[1]) > 15 || !_sql_safe_in(argv[1]) ) {
+        if ( strlen(argv[1]) > 15 || !pmsql_safe_in(argv[1]) ) {
             printf("Disallowed vault name. Must be less than 16 characters, and"\
                 " contain only letters, numbers and _. Cannot begin with _.\n");
             return -1;
@@ -45,11 +45,12 @@ int cli_main( int argc, char * * argv, pm_inst * PM_INST) {
     // }
     //---
 
-    char * verbs[] = { "set", "get", "forg", "rec", "del", "loc", "help" };
-    char need_name[] = { 1, 1, 1, 1, 1, 1, 0 };
-    int verbs_len = 7;
+    char * verbs[] = { "set", "get", "forg", "rec", "del", "loc", "mkvault" ,
+        "rmvault", "help" };
+    char need_name[] = { 1, 1, 1, 1, 1, 1, 1, 1, 0 };
+    int verbs_len = 9;
     void (*functions[])(pm_inst *, char *) = { set, get, forget, recover, delete,
-        locate, help };
+        locate, mkvault, rmvault, help };
 
     char * verb = argv[0];
     int i = 0;
@@ -65,9 +66,10 @@ int cli_main( int argc, char * * argv, pm_inst * PM_INST) {
                 }
             }
             (*functions[i])(PM_INST, argv[1+(argc==3)]);
+            return 0;
         }
     }
-    if ( i == verbs_len - 1 )
+    if ( i == verbs_len )
         help(NULL, NULL); // verb unmatched
     return 0; // currently unused ret for cli_main
 }
@@ -79,7 +81,8 @@ void set(pm_inst * PM_INST, char * name) {
         printf("Set: an entry with name %s already exists in %s.\n", name, PM_INST->table_name );
         return;
     } else if ( exists == 1 ) { //Entry exists but is in trash, will be overwritten.
-        _delete(PM_INST, name, name_len);
+        if ( _delete(PM_INST, name, name_len) )
+            printf("Set: backend error in _delete: %s\n", sqlite3_errmsg(PM_INST->db) );
     }
 
     char * prompt = "Enter the ciphertext for the entry %:\n";
@@ -132,9 +135,12 @@ void set(pm_inst * PM_INST, char * name) {
     if ( enc_code == -2 ) {
         printf("Set: Wrong password for vault %s. Use -u to make an arbitrary key entry\n",
             PM_INST->table_name);
-        return; // We're free to just return because we've already destroyed our sensitive data
+        return; // We're free to just return because we've already destroyed our sensitive data (and so had enc)
     } else if ( enc_code == -4) {
         printf("Set: Commkey / ukey mismatch. Toggle -u to fix\n");
+        return;
+    } else if ( enc_code == -3) {
+        printf("Set: PMSQL error in enc.\n");
         return;
     } else if ( enc_code == -1) {
         printf("Set: SQL error: %s\n", sqlite3_errmsg(PM_INST->db) );
@@ -224,7 +230,7 @@ void get(pm_inst * PM_INST, char * name) {
     void * * data;
     int * data_tp;
     int * data_sz;
-    sqlite3 * stmt;
+    sqlite3_stmt * stmt;
     pmsql_stmt * pmsql;
     int ecode = 0;
 
@@ -386,6 +392,86 @@ void locate(pm_inst * PM_INST, char * name) {
     }
 }
 
+void mkvault(pm_inst * PM_INST, char * name) {
+    if ( !name || strlen(name) == 0 ) { // short circut ?
+        printf("Mkvault: name required. [ pm mkvault NAME ]\n");
+    }
+    if ( !pmsql_safe_in(name) || strlen(name) > 15 ) {
+        printf("Invalid vault name. Must contain only alphabetical characters and _."
+            "Cannot start with _, and must be 15 characters or less\n");
+    } // these need to be up here so error handling doesnt try to finalize nonexistant
+    sqlite3_stmt * stmt;
+    pmsql_stmt pmsql = { SQLITE_STATIC, PM_INST->db, stmt, 0 };
+
+    int exists = _entry_in_table(PM_INST, "_index", name);
+    if ( exists == 2 ) {
+        printf("%s already exists. [ pm rmvault %s to remove ]\n", name, PM_INST->table_name);
+        return;
+    } else if ( exists == 1 ) {
+        if ( _delete_val(PM_INST, name) )
+            goto mkv_sql_fail;
+    } else if ( exists != 0  ) { // error in _e_i_v
+        return;
+    }
+    char ukey = (PM_INST->pm_opts & 4) >>2;
+    char * bquery;
+    if (ukey) {
+        bquery = "CREATE TABLE %s (ID CHAR(32) PRIMARY KEY, SALT CHAR(9) NOT NULL, "\
+            "MASTER_KEY BINARY(23), CIPHER BINARY(96) NOT NULL, VIS TINYINT, "\
+            "VALIDATE TINYTINT)";
+    } else {
+        bquery = "CREATE TABLE %s (ID CHAR(32) PRIMARY KEY, SALT CHAR(9)"\
+            "NOT NULL, CIPHER BINARY(96) NOT NULL, VIS TINYINT, VALIDATE TINYTINT)";
+        ukey = 2; // first_commkey
+    }
+
+    size_t buffsz = strlen(bquery) + 32;
+    char * query = malloc( buffsz );
+    snprintf(query, buffsz, bquery, name);
+
+    int ecode = sqlite3_prepare_v2(PM_INST->db, query, strlen(query), &stmt, NULL);
+    free(query);
+    if ( ecode != SQLITE_OK )
+        goto mkv_sql_fail;
+
+    ecode = sqlite3_step(stmt);
+    if ( ecode != SQLITE_DONE )
+        goto mkv_sql_fail;
+
+    bquery = "INSERT INTO _index (ID, UKEY, VIS) VALUES (?,?,1)";
+    void * * data = ( void * [2] ) { name, ukey };
+    int * data_tp = ( int [2] ) { PMSQL_TEXT, PMSQL_INT };
+    //----
+    if (( ecode = pmsql_compile(&pmsql, bquery, 2, data, NULL, data_tp) ))
+        goto mkv_sql_fail;
+    //---
+    if ( sqlite3_step(pmsql.stmt) != SQLITE_DONE )
+        goto mkv_sql_fail;
+
+    sqlite3_finalize(pmsql.stmt);
+    return;
+
+    mkv_sql_fail:
+        printf("Mkvault: SQL Error: %s\n", sqlite3_errmsg(PM_INST->db) );
+        sqlite3_finalize(pmsql.stmt);
+}
+
+void rmvault(pm_inst * PM_INST, char * name) {
+    int vis;
+    if (!( vis = _entry_in_table(PM_INST, "_index", name) )) {
+        printf("Rmvault: No vault %s exists.\n", name);
+        return;
+    } else if ( vis == 1 ) {
+        printf("Rmvault: Vault %s already deleted.\n", name);
+        return;
+    } // this is kind of hackey but I am so done with this software
+    strncpy(PM_INST->table_name, "_index", 7);
+    if (( _recover_or_forget(PM_INST, name, 0 ) )) {
+        printf("A backend error prevented vault deletion. SQL : %s",
+            sqlite3_errmsg(PM_INST->db) );
+    }
+}
+
 // only takes these args for ease of calling. ignores them
 void help(pm_inst * PM_INST, char * name) {
     printf("In production, this is a help page.\n");
@@ -413,11 +499,14 @@ int _entry_in_table(pm_inst * PM_INST, char * tb_name, char * ent_name) {
         goto eit_sql_fail;
 
     ecode = sqlite3_column_int(statement, 0);
+    sqlite3_finalize(statement);
+
     return ecode + 1;
 
     eit_sql_fail:
         printf("Entry in Table: SQL Error: %s\n", sqlite3_errmsg(PM_INST->db) );
-        return 0;
+        sqlite3_finalize(statement);
+        return -1;
 }
 
 int _recover_or_forget(pm_inst * PM_INST, char * name, int op ){
@@ -442,29 +531,27 @@ int _recover_or_forget(pm_inst * PM_INST, char * name, int op ){
     sqlite3_stmt * statement;
     int ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &statement, NULL);
     free(query);
-    if ( ecode != SQLITE_OK ) {
-        printf("%s: Error compiling SQL query: %s\n", opstrings[op], sqlite3_errmsg(PM_INST->db) );
-        return -1;
-    }
+    if ( ecode != SQLITE_OK )
+        goto roc_sql_fail;
 
     ecode = sqlite3_bind_int(statement, 1, op);
-    if ( ecode != SQLITE_OK ) {
-        printf("%s: Error binding SQL query: %s\n", opstrings[op], sqlite3_errmsg(PM_INST->db) );
-        return -1;
-    }
+    if ( ecode != SQLITE_OK )
+        goto roc_sql_fail;
+
     ecode = sqlite3_bind_text(statement, 2, name, name_len, SQLITE_STATIC);
-    if ( ecode != SQLITE_OK ) {
-        printf("%s: Error binding SQL query: %s\n", opstrings[op], sqlite3_errmsg(PM_INST->db) );
-        return -1;
-    }
+    if ( ecode != SQLITE_OK )
+        goto roc_sql_fail;
 
     ecode = sqlite3_step(statement);
-    if ( ecode == SQLITE_DONE ) {
-        return 0;
-    }
+    if ( ecode != SQLITE_DONE )
+        goto roc_sql_fail;
 
-    printf("%s: Error executing SQL query: %s\n", opstrings[op], sqlite3_errmsg(PM_INST->db) );
-    return -2;
+    sqlite3_finalize(statement);
+    return 0;
+    roc_sql_fail:
+        printf("%s: SQL Error: %s\n", opstrings[op], sqlite3_errmsg(PM_INST->db) );
+        sqlite3_finalize(statement);
+        return -1;
 }
 
 int _delete(pm_inst * PM_INST, char * name, int name_len) {
@@ -487,6 +574,7 @@ int _delete(pm_inst * PM_INST, char * name, int name_len) {
     }
 
     ecode = sqlite3_step(statement);
+    sqlite3_finalize(statement);
     if ( ecode == SQLITE_DONE ) {
         return 0;
     }
@@ -496,16 +584,39 @@ int _delete(pm_inst * PM_INST, char * name, int name_len) {
     return -1;
 }
 
-int _sql_safe_in( char * in ) {
-    unsigned char c;
-    if (!in)
-        return 0;
-    if ( in[0] == '_' )
-        return 0;
-    while(( c = *in++ )) {
-        if ( c < 48 || ( c > 57 && c < 65 ) || ( c > 90 && c < 97 ) || ( c > 122 ) ) {
-            return 0;
-        }
-    }
-    return 1;
+int _delete_val( pm_inst * PM_INST, char * name ) {
+    char * bquery = "DROP TABLE %s";
+    size_t buffsize = strlen(bquery) + 16;
+    char * query = malloc(buffsize);
+    snprintf(query, buffsize, bquery, name);
+
+    sqlite3_stmt * stmt;
+    pmsql_stmt pmsql = { SQLITE_STATIC, PM_INST->db, stmt, 0 };
+
+    int ecode = sqlite3_prepare_v2(PM_INST->db, query, strlen(query), &stmt, NULL);
+    free(query);
+    if ( ecode )
+        goto del_val_sql_fail;
+
+    ecode = sqlite3_step(stmt);
+    if ( ecode != SQLITE_DONE )
+        goto del_val_sql_fail;
+
+    query = "DELETE FROM _index WHERE ID = ?";
+
+    void * * data = (void * [1] ) { name };
+    int * data_tp = (int [1] ){ PMSQL_TEXT };
+    if (( ecode = pmsql_compile( &pmsql, query, 1, data, NULL, data_tp ) ))
+        goto del_val_sql_fail;
+
+    if (sqlite3_step(pmsql.stmt) != SQLITE_DONE)
+        goto del_val_sql_fail;
+
+    sqlite3_finalize(pmsql.stmt);
+    return 0;
+
+    del_val_sql_fail:
+        printf("Backend error prevented vault deletion: SQL Error: %s\n", sqlite3_errmsg(PM_INST->db) );
+        sqlite3_finalize(pmsql.stmt);
+        return -1;
 }
