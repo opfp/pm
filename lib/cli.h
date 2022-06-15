@@ -23,5 +23,6 @@ int _entry_in_table( pm_inst *, char *, char *);
 int _recover_or_forget(pm_inst *, char *, int);
 int _delete(pm_inst *, char *, int);
 int _delete_val(pm_inst *, char *);
+char * * _find_by_key( pm_inst *, char *, char *, int); 
 
 #endif

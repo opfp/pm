@@ -383,13 +383,22 @@ void locate(pm_inst * PM_INST, char * name) {
     } else if ( found == 1 ) {
         printf("%s is in the trash. [ pm rec %s ] to recover.\n", name, name);
         return;
-    } else if ( found == 0 ) {
+    } else if ( found ) {
+        printf("Locate: error %i in _e_i_v: %s\n", found, sqlite3_errmsg(PM_INST->db) );
+    }
+    /* else if ( found == 0 ) {
         printf("%s not found in %s. Perhaps look elsewhere? [ pm ls-vaults ] to list valults.\n",
             name, PM_INST->table_name);
         return;
-    } else {
-        printf("Locate: error %i in _e_i_v: %s\n", found, sqlite3_errmsg(PM_INST->db) );
+    } */
+    char * * sims = _find_by_key(PM_INST, PM_INST->table_name, name, 8);
+    printf("%s:%s not found. See these similar entries:\n", PM_INST->table_name, name);
+    for( int i = 0; i < 8; i++ ) {
+        if (!sims[i])
+            break;
+        printf("%i : %s\n",i+1, sims[i] );
     }
+    free(sims);
 }
 
 void mkvault(pm_inst * PM_INST, char * name) {
@@ -619,4 +628,109 @@ int _delete_val( pm_inst * PM_INST, char * name ) {
         printf("Backend error prevented vault deletion: SQL Error: %s\n", sqlite3_errmsg(PM_INST->db) );
         sqlite3_finalize(pmsql.stmt);
         return -1;
+}
+
+char * * _find_by_key( pm_inst * PM_INST, char * tb, char * key, int numres ) {
+    char * bquery = "SELECT ID FROM %s WHERE VIS = 1";
+    size_t buffsz = strlen(bquery) + strlen(tb);
+    char * query = malloc( buffsz );
+    snprintf(query, buffsz, bquery, tb );
+
+    sqlite3_stmt * stmt;
+    int ecode = sqlite3_prepare_v2(PM_INST->db, query, strlen(query), &stmt, NULL);
+    free(query);
+    if ( ecode )
+        goto find_sql_fail;
+
+    char * * results = malloc( 65 * sizeof(char *) );
+    void * * rescodes = malloc( 65 * sizeof(void *) );
+    char * * s_results = results;
+    void * * s_rescodes = rescodes;
+
+    int i = 0;
+    ecode = sqlite3_step(stmt);
+    while ( ecode == SQLITE_ROW ) {
+        if ( i && (i % 64 == 0) ) {
+            results[64] = malloc( 65 * sizeof(char *) );
+            rescodes[64] = malloc( 65 * sizeof(void *) );
+            results = (char * *) results[64];
+            rescodes = (void * *) rescodes[64];
+            i++;
+            continue;
+        }
+        size_t sz = sqlite3_column_bytes(stmt, 0);
+        char * this = malloc(sz+1);
+        memcpy( this, sqlite3_column_text(stmt, 0), sz);
+        this[sz] = 0;
+
+        uint32_t res = o_search(this,key);
+        rescodes[i%64] = (void *) res;
+        results[i%64] = this;
+        //printf("%s : %i\n", results[i%64], rescodes[i%64] );
+        i++;
+        ecode = sqlite3_step(stmt);
+    }
+    if ( ecode != SQLITE_DONE )
+        goto find_sql_fail;
+    sqlite3_finalize(stmt);
+    //now, a sort to find numents of the top matches
+    if ( (i - i/64) < numres )
+        numres = i - i/64;
+    else if ( (i - i/64) == numres ) {
+        //handle base case
+    }
+    //printf("numres: %i\n", numres );
+    char * * tops = malloc( ( numres + 1) * sizeof(char * ) );
+    memset(tops, 0, ( numres + 1) * sizeof(char *) );
+    int * top_vals = malloc(numres * sizeof(int ) );
+    memset(top_vals, 0, numres * sizeof(int) );
+    // crawl along the hybrid linked list and sort insert and free
+    for (int j = 0; j < i; j++ ) { /* this is like 3 lines in python :\ */
+        if ( j && (j % 64 == 0) ) {
+            char * * oldc = s_results;
+            void * * oldi = s_rescodes;
+            s_results = s_results[64];
+            s_rescodes = s_rescodes[64];
+            free(oldc);
+            free(oldi);
+            oldc = NULL;
+            oldi = NULL;
+            continue;
+        }
+        //printf("%s : %i\n", s_results[j%64], s_rescodes[j%64] );
+        if ( s_rescodes[j%64] <= top_vals[numres-1] ) {
+            //printf("skipping %s\n", s_results[j%64] );
+            continue;
+        } // find index of our new entry into top
+        int ci = numres - 1;
+        while ( (s_rescodes[j%64] > top_vals[ci]) && ( ci )  ) {
+            ci--;
+            //printf("%i\n", ci );
+        } // now insert at rightful index
+        for ( int k = numres - 2; k >= ci; k-- ) {
+            if ( !tops[k] )
+                continue;
+            //printf("Moving %s down\n", tops[k] );
+            tops[k+1] = tops[k];
+            top_vals[k+1] = tops[k];
+        }
+        //tops[ci] = s_results[j%64];
+        tops[ci] = malloc( strlen(s_results[j%64]) ) ;
+        strcpy(tops[ci], s_results[j%64]);
+        top_vals[ci] = s_rescodes[j%64];
+        for ( int i = 0; i++; i < numres ) {
+            if ( !tops[i] )
+                break;
+            //printf("%i : %s\n",i, tops[i] );
+        }
+    }
+    if ( s_results ) {
+        free(s_results);
+        free(s_rescodes);
+    }
+    free(top_vals);
+    return tops;
+    find_sql_fail:
+        printf("Find: SQL error: %s\n", sqlite3_errmsg(PM_INST->db) );
+        return NULL;
 }
