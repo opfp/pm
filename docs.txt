@@ -18,12 +18,25 @@ Verbs:
 
     del : (delete) Remove the named entry from the database. Cannot be undone.
 
-    loc : (locate) Prints a list of entries which match the given expression.
+    ls : (list/locate) Prints a list of entries which match the given expression.
+        If no expression is provided, prints all entries in the relevant MAIN vault.
+        Use lsv [vault] to list all the entries in a user created vault.
+
+    lsv : (list vaults) Prints a list of vaults which match the given expression.
+        If an exact match is found, the contents of the vault will also be printed
+
+    mkvault (make vault) : Creates a new vault with the given name.
+
+    rmvault (remove vault) : Deletes the vault with the given name. This action
+        cannot be undone.
 
 Options: By default, the retrieved password is written to the clipboard, where it
     will remain for CLIPCOOLDOWN seconds. After the interval, the clipboard is rewritten
     with its previous contents. Pm remembers if it has written multiple passwords,
     and will clear all of them at the end of the interval.*
+
+    -u (unique key) : Specifies that the vault to be operated on is unique key, 
+        not (necessarily) sharing the same secret key among all entries.
 
     -e : Echo the retrieved password to stdout. Not recommended.
 

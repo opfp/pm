@@ -508,7 +508,7 @@ void _ls_find(pm_inst * PM_INST, char * name, char vault ) {
     int i = 1;
     while ( all[i] ) {
         if ( all[0][i] ) {
-            if ( vault )
+            if ( vault && name )
                 printf("\t");
             printf("%s\n", all[i]);
         }
