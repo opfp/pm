@@ -38,7 +38,7 @@ int main( int argc, char * * argv ) {
             if (( l = strchr(flags, c) ))
                  opts |= ( 1 << ( l - flags ) );
         }
-        argv[argc-1] = NULL; 
+        argv[argc-1] = NULL;
     }
 
     char * pm_conf_str = malloc(pm_conf_sz+1);
@@ -75,6 +75,7 @@ int main( int argc, char * * argv ) {
         opts |= ( ( atoi(atts[i]) & 1 ) << ( i + 1) );
     }
     free(atts);
+    free(pm_conf_str); 
 
     if ( hydro_init() != 0 ) {
         printf("Init: error initilizing hydrogen\n");
@@ -124,8 +125,7 @@ int val_pad(char * in) {
     }
     return 0;
 }
-// NEEDS TO BE REWORKED: so that values which contain a keyname are not confused
-// with the actual key
+
 char * * get_atts_conf( char * conf_str, int attc, char * * att_map) {
     if ( !conf_str || !att_map )
         return NULL;
@@ -136,11 +136,12 @@ char * * get_atts_conf( char * conf_str, int attc, char * * att_map) {
         if (!this_attr)
             return NULL;
         // all this is so keys which are also values don't cause trouble
-        // while ( this_attr != conf_str && *(this_attr-1) != '\n' ) {
-        //     this_attr = strstr(this_attr + 1, att_map[i]);
-        //     if ( !this_attr)
-        //         return NULL;
-        // }
+        while ( *(this_attr+strlen(att_map[i])) != '=' ) {
+            printf("%s\n", this_attr );
+            this_attr = strstr(this_attr + 1, att_map[i]);
+            if ( !this_attr )
+                return NULL;
+        }
         this_attr = strchr(this_attr, '=')+1;
         *(strchr(this_attr, '\n')) = 1; // flag for put 0 here later
         ret[i] = this_attr;
@@ -150,7 +151,6 @@ char * * get_atts_conf( char * conf_str, int attc, char * * att_map) {
         *rover++ = 0;
         rover = strchr(rover, 1);
     }
-
     return ret;
 }
 
