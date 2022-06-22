@@ -8,7 +8,7 @@
 #include <ctype.h>
 
 // Only supports string. Up to you to free memory after use!
-char * concat(char *, int, ...);
+//char * concat(char *, int, ...); // depreciated
 uint32_t o_search(char *, char *);
 // uint64_t o_search_l(char *, char *);
 #endif

@@ -38,6 +38,7 @@ int main( int argc, char * * argv ) {
             if (( l = strchr(flags, c) ))
                  opts |= ( 1 << ( l - flags ) );
         }
+        argv[argc-1] = NULL; 
     }
 
     char * pm_conf_str = malloc(pm_conf_sz+1);

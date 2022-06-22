@@ -7,7 +7,7 @@ Verbs:
     set : Make a new entry with the given name. You will then be prompted for
         the secret key, and the text to store.
 
-        get : Retrieve a stored password under the given name. The secret key
+    get : Retrieve a stored password under the given name. The secret key
         is required to retrieve the password.
 
     forg : (forget) Mark the named entry as forgotten. The password hash WILL NOT

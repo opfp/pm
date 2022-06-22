@@ -1,77 +1,80 @@
 # include "cli.h"
 
-int cli_main( int argc, char * * argv, pm_inst * PM_INST) {
+void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
     if ( argc < 1 ) {
         printf("pm: Not enough arguments. [pm help] for help, or read the docs.\n");
         //help(void, void);
-        return -1;
+        return;
     }
-    char def_commkey[] = "_main_cmk";
-    char def_arbkey[]  = "_main_ukey";
-
-    if ( PM_INST->pm_opts & 32 ) { // if defaults only
-        if ( PM_INST->pm_opts & 4 ) // if -u
-            memcpy(PM_INST->table_name, def_arbkey, 10);
-        else
-            memcpy (PM_INST->table_name, def_commkey, 9 );
-        if ( argc == 3 ) {
-            printf("pm is configured to only use default vaults, but vault specified."\
-                "[ pm chattr def_vaults 0 ] to enable user created vaults.\n");
-        }
-    } else if ( argc == 3 ) {
-        if ( strlen(argv[1]) > 15 || !pmsql_safe_in(argv[1]) ) {
-            printf("Disallowed vault name. Must be less than 16 characters, and"\
-                " contain only letters, numbers and _. Cannot begin with _.\n");
-            return -1;
-        }
-        if ( !_entry_in_table(PM_INST, "_index", argv[1]) ) {
-            printf("No vault named %s. [pm mkvault] to make a vault.\n", argv[1]);
-            return -1;
-        }
-        strncpy(PM_INST->table_name, argv[1], 15);
-    } else if ( PM_INST->pm_opts & 4 ) {
-        memcpy(PM_INST->table_name, def_arbkey, 10);
-    } else {
-        memcpy(PM_INST->table_name, def_commkey, 9 );
-    }
-
-    //Code for testing
-    // char * option_names[] = { "Echo", "Skip pswd hash val", "Use ukey vault",
-    //     "Confirm cipertexts" , "Warn on no validation" , "Use only default vaults"};
-    // unsigned char opts = PM_INST->pm_opts;
-    // for ( int i = 0; i < 6; i++) {
-    //     printf("%i : %s\n", ( opts & 1 ), option_names[i]);
-    //     opts = opts >> 1;
-    // }
-    //---
-
-    char * verbs[] = { "set", "get", "forg", "rec", "del", "loc", "mkvault" ,
-        "rmvault", "help" };
-    char need_name[] = { 1, 1, 1, 1, 1, 1, 1, 1, 0 };
-    int verbs_len = 9;
+    const int verbs_len = 10;
+    char * verbs[verbs_len] = { "set", "get", "forg", "rec", "del", "mkvault" ,
+        "rmvault", "ls", "lsv", "help" };
+    // See idocs for explanation of verb_type
+    char verb_type[verbs_len] = { 0, 0, 0, 0, 0, 1, 1, 2, 2, 4 };
     void (*functions[])(pm_inst *, char *) = { set, get, forget, recover, delete,
-        locate, mkvault, rmvault, help };
+        mkvault, rmvault, ls, lsv, help };
 
-    char * verb = argv[0];
     int i = 0;
     for(/*i*/; i < verbs_len; i++ ) {
-        if ( strcmp(verb, verbs[i]) == 0 ) {
-            if ( need_name[i] ) {
-                if ( argc < 2 || argv[1] == NULL || strlen(argv[1]) == 0 ) {
-                    printf("%s: name required. [pm help]\n", verbs[i]);
-                    return -1;
-                } else if ( strlen(argv[1]) > 31 ) {
-                    printf("pm: name must be less than 32 characters long.\n");
-                    return -1;
-                }
-            }
-            (*functions[i])(PM_INST, argv[1+(argc==3)]);
-            return 0;
+        if ( !strcmp(argv[0], verbs[i]) )
+            break;
+    }
+    if ( i > (verbs_len - 2) ) {
+        help(NULL, NULL);
+        return;
+    }
+
+    char * vault = NULL;
+    char * name = NULL;
+    if ( verb_type[i] == 0 ) {
+        if ( argc < 2 ) {
+            printf("%s: Name required. [pm help].\n", verbs[i] );
+            return;
+        }
+        name = ( argc > 2 ) ? argv[2] : argv[1];
+        vault = ( argc > 2 ) ? argv[1] : NULL;
+    } else if ( verb_type[i] == 1 ) {
+        if ( argc < 2 ) {
+            printf("%s: Vault name required. [pm help].\n", verbs[i] );
+            return;
+        }
+        vault = argv[1];
+    } else if ( verb_type[i] == 2 && argc > 1 ) {
+        name = ( argc > 2 ) ? argv[2] : argv[1];
+        vault = ( argc > 2 ) ? argv[1] : NULL;
+    } else if ( verb_type[i] == 3 ) {
+        if ( argc > 1 )
+            vault = argv[1];
+    }
+
+    if (vault) {
+        if ( !pmsql_safe_in(vault) || strlen(vault) > 15 ) {
+            printf("Illegal vault name: %s\n", vault);
+            return;
+        }
+        if ( PM_INST->pm_opts & 4 ) {
+            printf("Vault specified, but pm configured to only use defaults."
+                " [ pm chattr def_vaults 0 ] to enable user created vaults.\n");
+            return;
+        }
+        if ( !_entry_in_table(PM_INST, "_index", argv[1]) && !verb_type[i] ) {
+            printf("No vault named %s. [pm mkvault] to make a vault.\n", argv[1]);
+            return;
+        }
+    } else {
+        vault = ( PM_INST->pm_opts & 4 ) ? "_main_ukey" : "_main_cmk" ;
+    }
+    strcpy(PM_INST->table_name, vault);
+
+    if (name) {
+        if ( !pmsql_safe_in(name) || strlen(name) > 31 ) {
+            printf("Illegal name: %s\n", name);
+            return;
         }
     }
-    if ( i == verbs_len )
-        help(NULL, NULL); // verb unmatched
-    return 0; // currently unused ret for cli_main
+    //printf("%s : %s {%s}\n", verbs[i], name, PM_INST->table_name );
+    (*functions[i])(PM_INST, name);
+    return;
 }
 
 void set(pm_inst * PM_INST, char * name) {
@@ -85,8 +88,9 @@ void set(pm_inst * PM_INST, char * name) {
             printf("Set: backend error in _delete: %s\n", sqlite3_errmsg(PM_INST->db) );
     }
 
-    char * prompt = "Enter the ciphertext for the entry %:\n";
-    prompt = concat(prompt, 1, name);
+    char * rprompt = "Enter the ciphertext for the entry %:\n";
+    char * prompt = malloc(strlen(rprompt) + strlen(name) + 1);
+    sprintf(prompt, rprompt, name);
     char * ctxt = getpass(prompt);
     free(prompt);
 
@@ -162,27 +166,28 @@ void set(pm_inst * PM_INST, char * name) {
         memcpy( master_key, PM_INST->master_key + 9, M_KEYSIZE);
     }
     // bruh this turned out to be the same length
-    char * query;
+    char * rquery;
     void * data;
     int * data_sz;
     int * data_tp;
 
     char ukey = (PM_INST->pm_opts & 4) >> 2;
     if ( ukey ) {
-        query = "INSERT INTO % (ID,SALT,MASTER_KEY,CIPHER,VIS,VALIDATE) VALUES (?,?,?,?,?,?)";
+        rquery = "INSERT INTO %s (ID,SALT,MASTER_KEY,CIPHER,VIS,VALIDATE) VALUES (?,?,?,?,?,?)";
         data = (void *[6]) { name, salt, master_key, PM_INST->ciphertext, 1, validate };
         data_sz = (int [6]) { 0, 0, M_KEYSIZE, CIPHERSIZE, 0, 0 };
         data_tp = (int [6]) { PMSQL_TEXT, PMSQL_TEXT, PMSQL_BLOB, PMSQL_BLOB,
             PMSQL_INT, PMSQL_INT };
     } else {
-        query = "INSERT INTO % (ID,SALT,CIPHER,VIS,VALIDATE) VALUES (?,?,?,?,?)";
+        rquery = "INSERT INTO %s (ID,SALT,CIPHER,VIS,VALIDATE) VALUES (?,?,?,?,?)";
         data = (void *[5]) { name, salt, PM_INST->ciphertext, 1, validate };
         data_sz = (int [5]) { 0, 0, CIPHERSIZE, 0, 0 };
         data_tp = (int [5]) { PMSQL_TEXT, PMSQL_TEXT, PMSQL_BLOB, PMSQL_INT, PMSQL_INT};
     }
 
-    query = concat(query, 1, PM_INST->table_name);
-    int query_len = strlen(query);
+    size_t query_len = strlen(rquery) + strlen(PM_INST->table_name);
+    char * query = malloc(query_len+1);
+    snprintf(query, query_len, rquery, PM_INST->table_name);
 
     sqlite3_stmt * stmt;
     pmsql_stmt pmsql = { SQLITE_STATIC, PM_INST->db, stmt, NULL };
@@ -226,7 +231,7 @@ void get(pm_inst * PM_INST, char * name) {
         return;
     }
     // These will be used for our calls to the pmsql functions
-    char * query;
+    char * rquery;
     void * * data;
     int * data_tp;
     int * data_sz;
@@ -235,12 +240,12 @@ void get(pm_inst * PM_INST, char * name) {
     int ecode = 0;
 
     // query to index to get meta / val data for this entry
-    query = "SELECT UKEY, SALT, MASTER_KEY FROM _index WHERE ID = ?";
+    rquery = "SELECT UKEY, SALT, MASTER_KEY FROM _index WHERE ID = ?";
     data = ( void * [1] ) {PM_INST->table_name};
     data_tp = ( int [1] ) { PMSQL_TEXT };
     pmsql = &(pmsql_stmt) { SQLITE_STATIC, PM_INST->db, stmt, NULL };
 
-    if (( ecode = pmsql_compile( pmsql, query, 1, data, NULL, data_tp ) )) {
+    if (( ecode = pmsql_compile( pmsql, rquery, 1, data, NULL, data_tp ) )) {
         goto get_sql_fail;
     }
     ecode = sqlite3_step(pmsql->stmt);
@@ -263,20 +268,19 @@ void get(pm_inst * PM_INST, char * name) {
     char entry_val;
 
     if ( ukey )
-        query = "SELECT SALT, MASTER_KEY, CIPHER, VALIDATE FROM % WHERE ID = ?";
+        rquery = "SELECT SALT, MASTER_KEY, CIPHER, VALIDATE FROM %s WHERE ID = ?";
     else
-        query = "SELECT SALT, CIPHER, VALIDATE FROM % WHERE ID = ?";
+        rquery = "SELECT SALT, CIPHER, VALIDATE FROM %s WHERE ID = ?";
 
     data_tp = ( int[1] ) { PMSQL_TEXT };
     data = ( char * [1] ) { name };
-    // removing concat dependency later
-    query = concat(query, 1, PM_INST->table_name);
-    int query_len = strlen(query);
-    //---
-    if (( ecode = pmsql_compile( pmsql, query, 1, data, NULL, data_tp ) )) {
+    size_t query_len = strlen(rquery) + strlen(PM_INST->table_name);
+    char * query = malloc(query_len+1);
+    snprintf(query, query_len, rquery, PM_INST->table_name);
+
+    if (( ecode = pmsql_compile( pmsql, query, 1, data, NULL, data_tp ) ))
         goto get_sql_fail;
-    }
-    //---
+
     ecode = sqlite3_step(pmsql->stmt);
     if ( ecode != SQLITE_ROW ) {
         goto get_sql_fail;
@@ -351,11 +355,11 @@ void get(pm_inst * PM_INST, char * name) {
 }
 
 void forget(pm_inst * PM_INST, char * name) {
-    _recover_or_forget(PM_INST, name, 0);
+    _recover_or_forget(PM_INST, PM_INST->table_name, name, 0);
 }
 
 void recover(pm_inst * PM_INST, char * name) {
-    _recover_or_forget(PM_INST, name, 1);
+    _recover_or_forget(PM_INST,PM_INST->table_name, name, 1);
 }
 
 void delete(pm_inst * PM_INST, char * name) {
@@ -365,7 +369,7 @@ void delete(pm_inst * PM_INST, char * name) {
     }
     printf("This will permanently delete %s. This action cannot be undone."
         " Use forget [pm forg %s] to mark as forgotten, which can be undone"\
-        " (until an entry of the same name is set in vault).\nProceed with permanent"\
+        " (until an entry of the same name is set).\nProceed with permanent"\
         " deletion? (y/n)\n", name, name);
     if ( fgetc(stdin) != 'y' ) {
         printf("Del: aborting\n");
@@ -374,40 +378,15 @@ void delete(pm_inst * PM_INST, char * name) {
     _delete(PM_INST, name, name_len);
 }
 
-void locate(pm_inst * PM_INST, char * name) {
-    int name_len = strlen(name);
-    int found = _entry_in_table( PM_INST, PM_INST->table_name, name );
-    if ( found == 2 ) {
-        printf("%s:%s found.\n", PM_INST->table_name, name);
-        return;
-    } else if ( found == 1 ) {
-        printf("%s is in the trash. [ pm rec %s ] to recover.\n", name, name);
-        return;
-    } else if ( found ) {
-        printf("Locate: error %i in _e_i_v: %s\n", found, sqlite3_errmsg(PM_INST->db) );
-    }
-    /* else if ( found == 0 ) {
-        printf("%s not found in %s. Perhaps look elsewhere? [ pm ls-vaults ] to list valults.\n",
-            name, PM_INST->table_name);
-        return;
-    } */
-    char * * sims = _find_by_key(PM_INST, PM_INST->table_name, name, 8);
-    printf("%s:%s not found. See these similar entries:\n", PM_INST->table_name, name);
-    for( int i = 0; i < 8; i++ ) {
-        if (!sims[i])
-            break;
-        printf("%i : %s\n",i+1, sims[i] );
-    }
-    free(sims);
-}
-
 void mkvault(pm_inst * PM_INST, char * name) {
     if ( !name || strlen(name) == 0 ) { // short circut ?
         printf("Mkvault: name required. [ pm mkvault NAME ]\n");
     }
+    // first shouldn't happen, should be caught in cli_main.
     if ( !pmsql_safe_in(name) || strlen(name) > 15 ) {
         printf("Invalid vault name. Must contain only alphabetical characters and _."
             "Cannot start with _, and must be 15 characters or less\n");
+            return;
     } // these need to be up here so error handling doesnt try to finalize nonexistant
     sqlite3_stmt * stmt;
     pmsql_stmt pmsql = { SQLITE_STATIC, PM_INST->db, stmt, 0 };
@@ -473,25 +452,77 @@ void rmvault(pm_inst * PM_INST, char * name) {
     } else if ( vis == 1 ) {
         printf("Rmvault: Vault %s already deleted.\n", name);
         return;
-    } // this is kind of hackey but I am so done with this software
-    strncpy(PM_INST->table_name, "_index", 7);
-    if (( _recover_or_forget(PM_INST, name, 0 ) )) {
+    }
+    //strncpy(PM_INST->table_name, "_index", 7);
+    if (( _recover_or_forget(PM_INST, "_index", name, 0 ) )) {
         printf("A backend error prevented vault deletion. SQL : %s",
             sqlite3_errmsg(PM_INST->db) );
     }
 }
 
+void ls(pm_inst * PM_INST, char * name) {
+    _ls_find(PM_INST, name, 0);
+}
+
+void lsv(pm_inst * PM_INST, char * name) {
+    _ls_find(PM_INST, name, 1);
+}
 // only takes these args for ease of calling. ignores them
 void help(pm_inst * PM_INST, char * name) {
     printf("In production, this is a help page.\n");
 }
 
-int _entry_in_table(pm_inst * PM_INST, char * tb_name, char * ent_name) {
-    char * query = "SELECT VIS FROM % WHERE ID = ?";
-    query = concat(query, 1, tb_name);
-    int query_len = strlen(query);
+void _ls_find(pm_inst * PM_INST, char * name, char vault ) {
+    char * table = vault ? "_index" : PM_INST->table_name ;
+    //char * print = vault ? "The Vault" : name;
+    if ( name ) {
+        if ( _entry_in_table( PM_INST, table, name ) ) {
+            printf("%s:%s found. Contents:\n", table, name );
+            if ( vault ) {
+                table = name;
+                goto _ls_printall;
+            }
+            return;
+        }
+        char * * sims = _find_by_key(PM_INST, table, name, 8);
 
+        if (!sims ) {
+            printf("%s:%s not found. No similer entries were found either.\n",
+                table, name);
+            return;
+        }
+        printf("%s:%s not found. See these similar entries:\n", table, name);
+        int i = 1;
+        while(sims[i]) {
+            printf("%i : %s\n",i, sims[i] );
+            ++i;
+        }
+        free(sims);
+        return;
+    }
+    _ls_printall:;
+    char * * all = _all_in_table(PM_INST, table );
+    if (!all ) {
+        return;
+    }
+    int i = 1;
+    while ( all[i] ) {
+        if ( all[0][i] ) {
+            if ( vault )
+                printf("\t");
+            printf("%s\n", all[i]);
+        }
+        ++i;
+    }
+}
+
+int _entry_in_table(pm_inst * PM_INST, char * tb_name, char * ent_name) {
+    char * rquery = "SELECT VIS FROM %s WHERE ID = ?";
+    size_t query_len = strlen(rquery) + strlen(tb_name);
+    char * query = malloc(query_len+1);
+    snprintf(query, query_len, rquery, tb_name);
     sqlite3_stmt * statement;
+
     int ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &statement, NULL);
     free(query);
     if ( ecode != SQLITE_OK )
@@ -504,6 +535,7 @@ int _entry_in_table(pm_inst * PM_INST, char * tb_name, char * ent_name) {
     ecode = sqlite3_step(statement);
     if ( ecode == SQLITE_DONE )
         return 0;
+
     else if ( ecode != SQLITE_ROW )
         goto eit_sql_fail;
 
@@ -513,19 +545,19 @@ int _entry_in_table(pm_inst * PM_INST, char * tb_name, char * ent_name) {
     return ecode + 1;
 
     eit_sql_fail:
-        printf("Entry in Table: SQL Error: %s\n", sqlite3_errmsg(PM_INST->db) );
+        printf("Entry in Vault: SQL Error: %s\n", sqlite3_errmsg(PM_INST->db) );
         sqlite3_finalize(statement);
         return -1;
 }
 
-int _recover_or_forget(pm_inst * PM_INST, char * name, int op ){
+int _recover_or_forget(pm_inst * PM_INST, char * table, char * name, int op ){
     char * opstrings[] = { "Forget", "Recover" };
     if (name == NULL){
         printf("%s: a name is required.\n", opstrings[op]);
         return -1;
     }
     int name_len = strlen(name);
-    int exists = _entry_in_table(PM_INST, PM_INST->table_name, name);
+    int exists = _entry_in_table(PM_INST, table, name);
     if ( exists == 0 ) {
         printf("No entry %s:%s to %s.\n", PM_INST->table_name, name, opstrings[op]);
         return -1;
@@ -533,9 +565,10 @@ int _recover_or_forget(pm_inst * PM_INST, char * name, int op ){
         printf("%s:%s %s operaton already complete\n", PM_INST->table_name, name, opstrings[op]);
     }
 
-    char * query = "UPDATE % SET VIS = ? WHERE ID = ?";
-    query = concat(query, 1, PM_INST->table_name);
-    int query_len = strlen(query);
+    char * rquery = "UPDATE %s SET VIS = ? WHERE ID = ?";
+    size_t query_len = strlen(rquery) + strlen(table);
+    char * query = malloc(query_len+1);
+    snprintf(query, query_len, rquery, table);
 
     sqlite3_stmt * statement;
     int ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &statement, NULL);
@@ -564,9 +597,10 @@ int _recover_or_forget(pm_inst * PM_INST, char * name, int op ){
 }
 
 int _delete(pm_inst * PM_INST, char * name, int name_len) {
-    char * query = "DELETE FROM % WHERE ID = ?";
-    query = concat( query, 1, PM_INST->table_name);
-    int query_len = strlen(query);
+    char * rquery = "DELETE FROM %s WHERE ID = ?";
+    size_t query_len = strlen(rquery) + strlen(PM_INST->table_name);
+    char * query = malloc(query_len+1);
+    snprintf(query, query_len, rquery, PM_INST->table_name);
 
     sqlite3_stmt * statement;
     int ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &statement, NULL);
@@ -594,15 +628,15 @@ int _delete(pm_inst * PM_INST, char * name, int name_len) {
 }
 
 int _delete_val( pm_inst * PM_INST, char * name ) {
-    char * bquery = "DROP TABLE %s";
-    size_t buffsize = strlen(bquery) + 16;
-    char * query = malloc(buffsize);
-    snprintf(query, buffsize, bquery, name);
+    char * rquery = "DROP TABLE %s";
+    size_t query_len = strlen(rquery) + strlen(name);
+    char * query = malloc(query_len+1);
+    snprintf(query, query_len, rquery, name);
 
     sqlite3_stmt * stmt;
     pmsql_stmt pmsql = { SQLITE_STATIC, PM_INST->db, stmt, 0 };
 
-    int ecode = sqlite3_prepare_v2(PM_INST->db, query, strlen(query), &stmt, NULL);
+    int ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &stmt, NULL);
     free(query);
     if ( ecode )
         goto del_val_sql_fail;
@@ -630,107 +664,101 @@ int _delete_val( pm_inst * PM_INST, char * name ) {
         return -1;
 }
 
+char * FBK_KEY; // No way to get around glob unfortuantely
 char * * _find_by_key( pm_inst * PM_INST, char * tb, char * key, int numres ) {
-    char * bquery = "SELECT ID FROM %s WHERE VIS = 1";
-    size_t buffsz = strlen(bquery) + strlen(tb);
-    char * query = malloc( buffsz );
-    snprintf(query, buffsz, bquery, tb );
+    char * * all = _all_in_table( PM_INST, tb );
+    //---
+    if ( !all )
+        return NULL;
+
+    int c = 1;
+    while ( all[c] ) { // pick out vis=0 and nonsimilar ents
+        //printf("%s\n",all[c] );
+        if ( !all[0][c] || !o_search(all[c], key) ) {
+            all[c] = all[c+1];
+            int j = c+1;
+            if ( ! all[j] )
+                continue;
+            while(( all[j] = all[j+1] )) { j++; };
+        } else
+            c++;
+    }
+    //---
+    c-=1;
+    if ( !c )
+        return NULL;
+    FBK_KEY = key;
+    qsort( &all[1], c, sizeof(char *), _fbk_compare );
+    return all;
+}
+
+int _fbk_compare( const void * a, const void * b) {
+    char * * sa = (char * *) a;
+    char * * sb = (char * *) b;
+    //printf("%s ? %s\n", *sa, *sb );
+    uint32_t sa_sc = o_search(*sa, FBK_KEY);
+    uint32_t sb_sc = o_search(*sb, FBK_KEY);
+
+    if ( sa_sc > sb_sc ) // try return sa_sc - sb_sc
+        return 1;
+    else if ( sb_sc > sa_sc )
+        return -1;
+    else
+        return 0;
+}
+
+char * * _all_in_table( pm_inst * PM_INST, char * tb_name ) {
+    char * bquery = "SELECT COUNT(*) FROM %s";
+    size_t query_len = strlen(bquery) + strlen(tb_name);
+    char * query = malloc(query_len + 1);
+    snprintf(query, query_len, bquery, tb_name);
 
     sqlite3_stmt * stmt;
-    int ecode = sqlite3_prepare_v2(PM_INST->db, query, strlen(query), &stmt, NULL);
+    int ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &stmt, NULL);
     free(query);
-    if ( ecode )
-        goto find_sql_fail;
 
-    char * * results = malloc( 65 * sizeof(char *) );
-    void * * rescodes = malloc( 65 * sizeof(void *) );
-    char * * s_results = results;
-    void * * s_rescodes = rescodes;
-
-    int i = 0;
+    if ( ecode != SQLITE_OK )
+        goto ait_sql_fail;
     ecode = sqlite3_step(stmt);
-    while ( ecode == SQLITE_ROW ) {
-        if ( i && (i % 64 == 0) ) {
-            results[64] = malloc( 65 * sizeof(char *) );
-            rescodes[64] = malloc( 65 * sizeof(void *) );
-            results = (char * *) results[64];
-            rescodes = (void * *) rescodes[64];
-            i++;
-            continue;
-        }
-        size_t sz = sqlite3_column_bytes(stmt, 0);
-        char * this = malloc(sz+1);
-        memcpy( this, sqlite3_column_text(stmt, 0), sz);
-        this[sz] = 0;
 
-        uint32_t res = o_search(this,key);
-        rescodes[i%64] = (void *) res;
-        results[i%64] = this;
-        //printf("%s : %i\n", results[i%64], rescodes[i%64] );
+    if ( ecode != SQLITE_ROW )
+        goto ait_sql_fail;
+
+    int rows = sqlite3_column_int(stmt, 0);
+    if ( !rows)
+        return NULL;
+    // if (( ecode = sqlite3_finalize(stmt) ));
+    //     goto ait_sql_fail;
+    sqlite3_finalize(stmt);
+
+    char * * ids = malloc(rows * sizeof(char *) + 2 );
+    char * vis = malloc(rows);
+    ids[0] = vis;
+
+    bquery = (char *) "SELECT ID, VIS from %s";
+    query_len = strlen(bquery) + strlen(tb_name);
+    query = malloc(query_len + 1);
+    snprintf(query, query_len, bquery, tb_name);
+
+    if (( ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &stmt, NULL) ))
+        goto ait_sql_fail;
+    //--
+    ecode = sqlite3_step(stmt);
+    int i = 1;
+    while ( ecode == SQLITE_ROW && i <= rows ) {
+        char * this = malloc( sqlite3_column_bytes(stmt, 0) + 1 );
+        strcpy(this, sqlite3_column_text(stmt, 0) );
+        ids[i] = this;
+        vis[i] = sqlite3_column_int(stmt, 1) ;
         i++;
         ecode = sqlite3_step(stmt);
     }
+    ids[i] = NULL;
     if ( ecode != SQLITE_DONE )
-        goto find_sql_fail;
-    sqlite3_finalize(stmt);
-    //now, a sort to find numents of the top matches
-    if ( (i - i/64) < numres )
-        numres = i - i/64;
-    else if ( (i - i/64) == numres ) {
-        //handle base case
-    }
-    //printf("numres: %i\n", numres );
-    char * * tops = malloc( ( numres + 1) * sizeof(char * ) );
-    memset(tops, 0, ( numres + 1) * sizeof(char *) );
-    int * top_vals = malloc(numres * sizeof(int ) );
-    memset(top_vals, 0, numres * sizeof(int) );
-    // crawl along the hybrid linked list and sort insert and free
-    for (int j = 0; j < i; j++ ) { /* this is like 3 lines in python :\ */
-        if ( j && (j % 64 == 0) ) {
-            char * * oldc = s_results;
-            void * * oldi = s_rescodes;
-            s_results = s_results[64];
-            s_rescodes = s_rescodes[64];
-            free(oldc);
-            free(oldi);
-            oldc = NULL;
-            oldi = NULL;
-            continue;
-        }
-        //printf("%s : %i\n", s_results[j%64], s_rescodes[j%64] );
-        if ( s_rescodes[j%64] <= top_vals[numres-1] ) {
-            //printf("skipping %s\n", s_results[j%64] );
-            continue;
-        } // find index of our new entry into top
-        int ci = numres - 1;
-        while ( (s_rescodes[j%64] > top_vals[ci]) && ( ci )  ) {
-            ci--;
-            //printf("%i\n", ci );
-        } // now insert at rightful index
-        for ( int k = numres - 2; k >= ci; k-- ) {
-            if ( !tops[k] )
-                continue;
-            //printf("Moving %s down\n", tops[k] );
-            tops[k+1] = tops[k];
-            top_vals[k+1] = tops[k];
-        }
-        //tops[ci] = s_results[j%64];
-        tops[ci] = malloc( strlen(s_results[j%64]) ) ;
-        strcpy(tops[ci], s_results[j%64]);
-        top_vals[ci] = s_rescodes[j%64];
-        for ( int i = 0; i++; i < numres ) {
-            if ( !tops[i] )
-                break;
-            //printf("%i : %s\n",i, tops[i] );
-        }
-    }
-    if ( s_results ) {
-        free(s_results);
-        free(s_rescodes);
-    }
-    free(top_vals);
-    return tops;
-    find_sql_fail:
-        printf("Find: SQL error: %s\n", sqlite3_errmsg(PM_INST->db) );
+        goto ait_sql_fail;
+    return ids;
+
+    ait_sql_fail:
+        printf("all_in_table SQL error: %i : %s\n", ecode, sqlite3_errmsg(PM_INST->db)  );
         return NULL;
 }

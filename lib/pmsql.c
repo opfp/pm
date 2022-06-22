@@ -137,7 +137,7 @@ int pmsql_safe_in( char * in ) {
     if ( in[0] == '_' )
         return 0;
     while(( c = *in++ )) {
-        if ( c < 48 || ( c > 57 && c < 65 ) || ( c > 90 && c < 97 ) || ( c > 122 ) ) {
+        if ( c < 48 || ( c > 57 && c < 65 ) || ( c > 90 && c < 95 ) || ( c > 122 ) ) {
             return 0;
         }
     }

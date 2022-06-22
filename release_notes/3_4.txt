@@ -1,0 +1,7 @@
+Pm Alpha .34
+
+PM alpha .34 fully implements the pm .30 spec, but with different vault names.
+    mkvault and rmvault remain the same, but loc and ls-vaults have been renamed
+    and reworked as ls and lsv. ls is for listing and searching for entries, while
+    lsv is the same for vaults. When lsv locates a vault, it also prints the contents
+    of the vault. 
