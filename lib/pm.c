@@ -57,7 +57,7 @@ int main( int argc, char * * argv ) {
     fread( pm_conf_str, 1, pm_conf_sz, pm_conf);
 
     char * att_names[] = { "cooldown" , "db_path" , "confirm_cphr",
-         "warn", "def_tables"};
+         "warn", "def_tables" };
     char * * atts = get_atts_conf( pm_conf_str, 5, att_names);
 
     if ( !atts ) {
@@ -85,7 +85,7 @@ int main( int argc, char * * argv ) {
     //     opts_chr |= ( ( atoi(atts[i]) & 1 ) << i );
     // }
     for( int i = 2; i < 5; i++ ) {
-        opts_chr |= ( atoi(atts[i]) & 1 ) << ( i + 3 );
+        opts_chr |= ( atoi(atts[i]) & 1 ) << ( i + 2 );
     }
     free(atts);
     free(pm_conf_str);

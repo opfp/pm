@@ -1,0 +1,4 @@
+PM Alpha 3.5 :
+    Removes lsv, replacing with ls -v. The -v option is new, specifying whether
+        certain commands operate on vaults or entries. Commands which -v affects
+        are: ls, forg, rec, and del.
