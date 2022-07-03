@@ -6,20 +6,20 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
         //help(void, void);
         return;
     }
-    const int verbs_len = 10;
-    char * verbs[verbs_len] = { "set", "get", "forg", "rec", "del", "mkvault" ,
-        "rmvault", "ls", "lsv", "help" };
+    const int num_verbs = 8;
+    char * verbs[num_verbs] = { "set", "get", "mkvault", "forg", "rec", "del", "ls",
+          "help" };
     // See idocs for explanation of verb_type
-    char verb_type[verbs_len] = { 0, 0, 0, 0, 0, 1, 1, 2, 2, 4 };
-    void (*functions[])(pm_inst *, char *) = { set, get, forget, recover, delete,
-        mkvault, rmvault, ls, lsv, help };
+    char verb_type[num_verbs] = { 0, 0, 0, 1, 1, 1, 2, 0};
+    void (*functions[])(pm_inst *, char *) = { set, get, mkvault, forget, recover,
+        delete, ls, help };
 
     int i = 0;
-    for(/*i*/; i < verbs_len; i++ ) {
+    for(/*i*/; i < num_verbs; i++ ) {
         if ( !strcmp(argv[0], verbs[i]) )
             break;
     }
-    if ( i > (verbs_len - 2) ) {
+    if ( i > (num_verbs - 2) ) {
         help(NULL, NULL);
         return;
     }
@@ -38,21 +38,25 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
             printf("%s: Vault name required. [pm help].\n", verbs[i] );
             return;
         }
-        vault = argv[1];
-    } else if ( verb_type[i] == 2 && argc > 1 ) {
-        name = ( argc > 2 ) ? argv[2] : argv[1];
-        vault = ( argc > 2 ) ? argv[1] : NULL;
-    } else if ( verb_type[i] == 3 ) {
-        if ( argc > 1 )
-            vault = argv[1];
+        name = argv[1];
+    } else if ( verb_type[i] == 2 ) {
+        name = ( argc > 1 ) ? argv[1] : NULL;
     }
-
+    // code for testing
+    // char * option_names[] = { "Echo", "Skip pswd hash val", "Use ukey vault",
+    //     "vault" , "Confirm cipertexts" , "Warn on no validation" , "Use only default vaults"};
+    // unsigned char opts = PM_INST->pm_opts;
+    // for ( int i = 0; i < 7; i++) {
+    //     printf("%i : %s\n", ( opts & 1 ), option_names[i]);
+    //     opts = opts >> 1;
+    // }
+    // ---
     if (vault) {
         if ( !pmsql_safe_in(vault) || strlen(vault) > 15 ) {
             printf("Illegal vault name: %s\n", vault);
             return;
         }
-        if ( PM_INST->pm_opts & 4 ) {
+        if ( PM_INST->pm_opts & 0x40 ) {
             printf("Vault specified, but pm configured to only use defaults."
                 " [ pm chattr def_vaults 0 ] to enable user created vaults.\n");
             return;
@@ -84,7 +88,7 @@ void set(pm_inst * PM_INST, char * name) {
         printf("Set: an entry with name %s already exists in %s.\n", name, PM_INST->table_name );
         return;
     } else if ( exists == 1 ) { //Entry exists but is in trash, will be overwritten.
-        if ( _delete(PM_INST, name, name_len) )
+        if ( _delete(PM_INST, name) )
             printf("Set: backend error in _delete: %s\n", sqlite3_errmsg(PM_INST->db) );
     }
 
@@ -223,8 +227,8 @@ void get(pm_inst * PM_INST, char * name) {
     int name_len = strlen(name);
     int exists = _entry_in_table(PM_INST, PM_INST->table_name, name);
     if ( exists == 0 ) {
-        printf("Get: No entry %s exists in %s. Perhaps look elsewhere? [pm ls-vaults] to list vaults\n",
-            name, PM_INST->table_name);
+        printf("Get: No entry %s exists in %s. Perhaps look elsewhere? [pm help]"
+        " for help on searching.\n", name, PM_INST->table_name);
         return;
     } else if ( exists == 1 ) {
         printf("Get: %s is in the trash. [pm rec %s] to recover so the entry may be retreived\n", name, name);
@@ -355,34 +359,44 @@ void get(pm_inst * PM_INST, char * name) {
 }
 
 void forget(pm_inst * PM_INST, char * name) {
-    _recover_or_forget(PM_INST, PM_INST->table_name, name, 0);
+    char * table = (PM_INST->pm_opts & 8) ? "_index" : PM_INST->table_name ;
+    _recover_or_forget(PM_INST, table, name, 0);
 }
 
 void recover(pm_inst * PM_INST, char * name) {
-    _recover_or_forget(PM_INST,PM_INST->table_name, name, 1);
+    char * table = (PM_INST->pm_opts & 8) ? "_index" : PM_INST->table_name ;
+    //printf("%i : %s\n", (PM_INST->pm_opts & 8), table  );
+    _recover_or_forget(PM_INST, table, name, 1);
 }
 
 void delete(pm_inst * PM_INST, char * name) {
     int name_len = strlen(name);
-    if ( ! _entry_in_table(PM_INST, PM_INST->table_name, name) ) {
+    char vault = (PM_INST->pm_opts & 8) >> 3;
+    char * table = vault ? "_index" : PM_INST->table_name ;
+
+    if ( ! _entry_in_table(PM_INST, table, name) ) {
         printf("Del: no entry to delete\n");
     }
     printf("This will permanently delete %s. This action cannot be undone."
-        " Use forget [pm forg %s] to mark as forgotten, which can be undone"\
+        " Use forget [pm help forg] to mark as forgotten, which can be undone"\
         " (until an entry of the same name is set).\nProceed with permanent"\
-        " deletion? (y/n)\n", name, name);
+        " deletion? (y/n)\n", name);
     if ( fgetc(stdin) != 'y' ) {
         printf("Del: aborting\n");
         return;
     }
-    _delete(PM_INST, name, name_len);
+
+    if ( vault )
+        _delete_val(PM_INST, name);
+    else
+        _delete(PM_INST, name);
 }
 
 void mkvault(pm_inst * PM_INST, char * name) {
+    // shouldn't happen, should be caught in cli_main.
     if ( !name || strlen(name) == 0 ) { // short circut ?
         printf("Mkvault: name required. [ pm mkvault NAME ]\n");
     }
-    // first shouldn't happen, should be caught in cli_main.
     if ( !pmsql_safe_in(name) || strlen(name) > 15 ) {
         printf("Invalid vault name. Must contain only alphabetical characters and _."
             "Cannot start with _, and must be 15 characters or less\n");
@@ -444,29 +458,29 @@ void mkvault(pm_inst * PM_INST, char * name) {
         sqlite3_finalize(pmsql.stmt);
 }
 
-void rmvault(pm_inst * PM_INST, char * name) {
-    int vis;
-    if (!( vis = _entry_in_table(PM_INST, "_index", name) )) {
-        printf("Rmvault: No vault %s exists.\n", name);
-        return;
-    } else if ( vis == 1 ) {
-        printf("Rmvault: Vault %s already deleted.\n", name);
-        return;
-    }
-    //strncpy(PM_INST->table_name, "_index", 7);
-    if (( _recover_or_forget(PM_INST, "_index", name, 0 ) )) {
-        printf("A backend error prevented vault deletion. SQL : %s",
-            sqlite3_errmsg(PM_INST->db) );
-    }
-}
+// void rmvault(pm_inst * PM_INST, char * name) {
+//     int vis;
+//     if (!( vis = _entry_in_table(PM_INST, "_index", name) )) {
+//         printf("Rmvault: No vault %s exists.\n", name);
+//         return;
+//     } else if ( vis == 1 ) {
+//         printf("Rmvault: Vault %s already deleted.\n", name);
+//         return;
+//     }
+//     //strncpy(PM_INST->table_name, "_index", 7);
+//     if (( _recover_or_forget(PM_INST, "_index", name, 0 ) )) {
+//         printf("A backend error prevented vault deletion. SQL : %s",
+//             sqlite3_errmsg(PM_INST->db) );
+//     }
+// }
 
 void ls(pm_inst * PM_INST, char * name) {
-    _ls_find(PM_INST, name, 0);
+    _ls_find(PM_INST, name, (PM_INST->pm_opts & 8) >> 3 ) ;
 }
 
-void lsv(pm_inst * PM_INST, char * name) {
-    _ls_find(PM_INST, name, 1);
-}
+// void lsv(pm_inst * PM_INST, char * name) {
+//     _ls_find(PM_INST, name, 1);
+// }
 // only takes these args for ease of calling. ignores them
 void help(pm_inst * PM_INST, char * name) {
     printf("In production, this is a help page.\n");
@@ -558,11 +572,13 @@ int _recover_or_forget(pm_inst * PM_INST, char * table, char * name, int op ){
     }
     int name_len = strlen(name);
     int exists = _entry_in_table(PM_INST, table, name);
-    if ( exists == 0 ) {
-        printf("No entry %s:%s to %s.\n", PM_INST->table_name, name, opstrings[op]);
+    if ( exists == -1 )
+        return -1;
+    else if ( exists == 0 ) {
+        printf("No entry %s:%s to %s.\n", table, name, opstrings[op]);
         return -1;
     } else if ( op + 1 == exists ) {
-        printf("%s:%s %s operaton already complete\n", PM_INST->table_name, name, opstrings[op]);
+        printf("%s:%s %s operaton already complete\n", table, name, opstrings[op]);
     }
 
     char * rquery = "UPDATE %s SET VIS = ? WHERE ID = ?";
@@ -596,7 +612,7 @@ int _recover_or_forget(pm_inst * PM_INST, char * table, char * name, int op ){
         return -1;
 }
 
-int _delete(pm_inst * PM_INST, char * name, int name_len) {
+int _delete(pm_inst * PM_INST, char * name) {
     char * rquery = "DELETE FROM %s WHERE ID = ?";
     size_t query_len = strlen(rquery) + strlen(PM_INST->table_name);
     char * query = malloc(query_len+1);
@@ -610,7 +626,7 @@ int _delete(pm_inst * PM_INST, char * name, int name_len) {
         return -1;
     }
 
-    ecode = sqlite3_bind_text(statement, 1, name, name_len, SQLITE_STATIC);
+    ecode = sqlite3_bind_text(statement, 1, name, strlen(name), SQLITE_STATIC);
     if ( ecode != SQLITE_OK ) {
         printf("Del: Error binding SQL query: %s\n", sqlite3_errmsg(PM_INST->db) );
         return -1;

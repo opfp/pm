@@ -25,22 +25,33 @@ int main( int argc, char * * argv ) {
         return -1;
     }
     // echo, noval, unique key
-    char flags[] = "enu";
-    char opts = 0;
-    char flags_passed = 0;
+    const int num_flags = 4;
+    char flags[num_flags+1] = "enuv";
+    char opts_chr = 0;
 
-    if ( argv[argc-1][0] == '-' && strlen(argv[argc-1]) > 1 ) {
-        flags_passed = 1;
-        int i = 0;
-        char c;
-        while((c = argv[argc-1][i++])) {
-            char * l;
-            if (( l = strchr(flags, c) ))
-                 opts |= ( 1 << ( l - flags ) );
+    if (argv[argc-1][0] == '-' ) {
+        for( int i = 0; i < num_flags; i++ ) {
+            char * match;
+            if (( match = strchr(argv[argc-1], flags[i]) )) {
+                //printf("%c in opts\n", flags[i] );
+                opts_chr |= 1 << i ;
+            }
         }
-        argv[argc-1] = NULL;
     }
 
+    // if ( argv[argc-1][0] == '-' && strlen(argv[argc-1]) > 1 ) {
+    //     flags_passed = 1;
+    //     int i = 0;
+    //     char c;
+    //     while((c = argv[argc-1][i++])) {
+    //         char * l;
+    //         if (( l = strchr(flags, c) ))
+    //              opts |= ( 1 << ( l - flags ) );
+    //     }
+    //     argv[argc-1] = NULL;
+    // }
+
+    //---
     char * pm_conf_str = malloc(pm_conf_sz+1);
     pm_conf_str[pm_conf_sz] = 0;
     fread( pm_conf_str, 1, pm_conf_sz, pm_conf);
@@ -60,22 +71,24 @@ int main( int argc, char * * argv ) {
     if ( cooldown > 600 ) {
         cooldown = 600;
         printf("Maximum configurable cooldown is 600s. Edit your cooldown settings"
-            " in %s to avoid seeing this warning in the future", argv[1] );
+            " in %s to avoid seeing this warning in the future.", argv[1] );
     }
 
     sqlite3 * db;
-    if ( sqlite3_open(db_path, &db) != 0 ) {
-        printf("Init: error connecting to database: %s. [ pm chdb ] or edit %s\n",
+    if ( sqlite3_open(db_path, &db) ) {
+        printf("Init: error connecting to database: %s. [ pm chattr db_path ] or edit %s\n",
             db_path, argv[1]);
         return -1;
     }
-    // char conf_opts = 0;
-    for( int i = 2; i < 5; i++) {
-        //printf("%s : %s\n", att_names[i], atts[i]);
-        opts |= ( ( atoi(atts[i]) & 1 ) << ( i + 1) );
+    // for( int i = num_flags; i < num_flags + 3; i++) {
+    //     printf("%s : %s\n", att_names[i], atts[i]);
+    //     opts_chr |= ( ( atoi(atts[i]) & 1 ) << i );
+    // }
+    for( int i = 2; i < 5; i++ ) {
+        opts_chr |= ( atoi(atts[i]) & 1 ) << ( i + 3 );
     }
     free(atts);
-    free(pm_conf_str); 
+    free(pm_conf_str);
 
     if ( hydro_init() != 0 ) {
         printf("Init: error initilizing hydrogen\n");
@@ -85,7 +98,7 @@ int main( int argc, char * * argv ) {
     pm_inst * PM_INST = malloc( sizeof(pm_inst));
     memset(PM_INST, 0, sizeof(pm_inst));
 
-    PM_INST->pm_opts = opts;
+    PM_INST->pm_opts = opts_chr;
     PM_INST->cooldown = cooldown;
 
     char table_name[] = "test";
@@ -93,23 +106,7 @@ int main( int argc, char * * argv ) {
 
     PM_INST->db = db;
 
-    cli_main(argc - ( 2 + flags_passed ), &argv[2], PM_INST);
-
-    //For now, lets avoid creating the guardian process until we're out of early testing
-    //int pid = fork();
-
-    // if ( pid == -1 )  { //pid returns 0 to child, and the child's pid to parent
-    //     printf("Init: Error initilizing guardian");
-    //     exit(-1);
-    // } else if (pid == 0 ) {
-    //     init_guardian(PM_INST);
-    // } else {
-    //     PM_INST->guardian_pid = pid;
-    // }
-
-    // IN THE FUTURE THESE WILL COME FROM pm.conf
-    //char help_path = "/Users/owen/cs/dev/pm/docs.txt";
-    // return PM_INST;
+    cli_main(argc - 2 - ( argv[argc-1][0] == '-' ), &argv[2], PM_INST);
 }
 
 int val_pad(char * in) {
@@ -153,46 +150,3 @@ char * * get_atts_conf( char * conf_str, int attc, char * * att_map) {
     }
     return ret;
 }
-
-// sqlite3_stmt * pm_sqlite3_make_stmt(char * basequery, ...) {
-//     // First, concat the statement
-//     basequery_len = strlen(basequery);
-//     int num_strings = 0;
-//     char * rover = basequery;
-//     while( rover < basequery + basequery_len ) {
-//
-//     }
-//
-// }
-
-// void init_guardian( pm_inst * PM_INST ){
-//     //signal( SIGABRT, guardian_clear_pm( PM_INST));
-//     //signal( SIGUSR1, guardian_sleep10 ); // This is
-//     while (1) {
-//         // Do guardian timecheck
-//         if ( PM_INST->key_write_time == 0 ) {
-//             sleep(5);
-//             continue;
-//         }
-//         time_t ctime;
-//         time(&ctime);
-//         ctime -= PM_INST->key_write_time;
-//         if ( ctime >= COOLDWN ) {
-//             guardian_clear_pm(PM_INST);
-//         }
-//         sleep(5);
-//     }
-// }
-//
-// void guardian_clear_pm( pm_inst * PM_INST ) {
-//     memcpy(PM_INST->master_key, 0, hydro_pwhash_MASTERKEYBYTES);
-//     memcpy(PM_INST->derived_key, 0, KEYSIZE);
-//     memcpy(PM_INST->plaintext, 0, DATASIZE);
-//     memcpy(PM_INST->ciphertext, 0, DATASIZE + hydro_secretbox_HEADERBYTES);
-//     PM_INST->key_write_time = 0;
-// }
-//
-// void guardian_sleep10() {
-//     printf("Guarding sleeping to allow enc\n");
-//     sleep(10);
-// }
