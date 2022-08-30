@@ -17,6 +17,7 @@ void mkvault(pm_inst *, char *);
 void rmvault(pm_inst *, char *);
 void ls(pm_inst *, char *);
 void lsv(pm_inst *, char *);
+void check(pm_inst *, char *);
 void help(pm_inst *, char *);
 
 void _ls_find(pm_inst *, char *, char);

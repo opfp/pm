@@ -36,7 +36,7 @@ int enc_plaintext( pm_inst * PM_INST ) {
     ecode = sqlite3_step(pmsql.stmt);
     if ( ecode != SQLITE_ROW )
         goto enc_sql_fail;
-    //---
+
     int ukey;
     char i_salt[SALTSIZE];
     char i_mkey[M_KEYSIZE];
@@ -46,7 +46,7 @@ int enc_plaintext( pm_inst * PM_INST ) {
 
     if (( ecode = pmsql_read(&pmsql, 3, data, data_sz, data_tp) ))
         goto enc_sql_fail;
-    //---
+
     char first_commkey = ukey & 2;
     ukey &= 1;
 
@@ -192,6 +192,10 @@ int dec_ciphertext( pm_inst * PM_INST ) {
     //memset( PM_INST->plaintext, 0, pswd_len );
     return 0;
 }
+
+// int check( pm_inst * PM_INST, char * name ) {
+//
+// }
 
 // Robert Jenkins' 96 bit Mix Function
 unsigned long mix(unsigned long a, unsigned long b, unsigned long c) {

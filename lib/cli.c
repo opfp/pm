@@ -6,13 +6,15 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
         //help(void, void);
         return;
     }
-    const int num_verbs = 8;
-    char * verbs[num_verbs] = { "set", "get", "mkvault", "forg", "rec", "del", "ls",
-          "help" };
+    const int num_verbs = 9;
+    char * verbs[num_verbs] = { "set", "get", "mkvault", "forg", "rec", "del",
+        "check", "ls", "help" };
     // See idocs for explanation of verb_type
-    char verb_type[num_verbs] = { 0, 0, 0, 1, 1, 1, 2, 0};
+
+    //                           set, get, mkv, forg, rec, del, chk, ls, help
+    char verb_type[num_verbs] = { 0 , 0  , 1  , 0   , 0  , 0  , 0  , 2 , 0};
     void (*functions[])(pm_inst *, char *) = { set, get, mkvault, forget, recover,
-        delete, ls, help };
+        delete, check, ls, help };
 
     int i = 0;
     for(/*i*/; i < num_verbs; i++ ) {
@@ -35,14 +37,25 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
         vault = ( argc > 2 ) ? argv[1] : NULL;
     } else if ( verb_type[i] == 1 ) {
         if ( argc < 2 ) {
-            printf("%s: Vault name required. [pm help].\n", verbs[i] );
+            printf("%s: Name required. [pm help].\n", verbs[i] );
             return;
         }
         name = argv[1];
     } else if ( verb_type[i] == 2 ) {
-        name = ( argc > 1 ) ? argv[1] : NULL;
+        if ( argc > 1 ) {
+            name = ( argc > 2 ) ? argv[2] : argv[1];
+            vault = ( argc > 2 ) ? argv[1] : NULL;
+        }
     }
-    // code for testing
+    // } else if ( verb_type[i] == 3 ) {
+    //     if ( argc < 2 ) {
+    //         printf("%s: Vault name required. [pm help].\n", verbs[i] );
+    //         return;
+    //     }
+    //     vault = argv[1];
+    //     name = ( argc > 2 ) ? argv[2] : NULL;
+    // }
+    // --- testing ---
     // char * option_names[] = { "Echo", "Skip pswd hash val", "Use ukey vault",
     //     "vault" , "Confirm cipertexts" , "Warn on no validation" , "Use only default vaults"};
     // unsigned char opts = PM_INST->pm_opts;
@@ -115,7 +128,7 @@ void set(pm_inst * PM_INST, char * name) {
     memcpy(context, ctxt, ctxt_len);
 
     char * check;
-    if ( PM_INST->pm_opts & 8 ) { // if confirm
+    if ( PM_INST->pm_opts & 16 ) { // if confirm
         check = getpass("Confirm your entry:\n");
         // if ( check == NULL )
         //     check = context; // Not a bug - user can bypass by entering nothing
@@ -458,29 +471,19 @@ void mkvault(pm_inst * PM_INST, char * name) {
         sqlite3_finalize(pmsql.stmt);
 }
 
-// void rmvault(pm_inst * PM_INST, char * name) {
-//     int vis;
-//     if (!( vis = _entry_in_table(PM_INST, "_index", name) )) {
-//         printf("Rmvault: No vault %s exists.\n", name);
-//         return;
-//     } else if ( vis == 1 ) {
-//         printf("Rmvault: Vault %s already deleted.\n", name);
-//         return;
-//     }
-//     //strncpy(PM_INST->table_name, "_index", 7);
-//     if (( _recover_or_forget(PM_INST, "_index", name, 0 ) )) {
-//         printf("A backend error prevented vault deletion. SQL : %s",
-//             sqlite3_errmsg(PM_INST->db) );
-//     }
-// }
-
 void ls(pm_inst * PM_INST, char * name) {
     _ls_find(PM_INST, name, (PM_INST->pm_opts & 8) >> 3 ) ;
 }
 
-// void lsv(pm_inst * PM_INST, char * name) {
-//     _ls_find(PM_INST, name, 1);
-// }
+void check(pm_inst * PM_INST, char * name) {
+    // printf("Check does nothing right now\n");
+    // return;
+    char * bquery = "SELECT UKEY from _index WHERE ID = ?";
+
+
+
+}
+
 // only takes these args for ease of calling. ignores them
 void help(pm_inst * PM_INST, char * name) {
     printf("In production, this is a help page.\n");

@@ -1,0 +1,6 @@
+#!/bin/bash
+BASE=/Users/owen/cs/dev/pm
+CONF=$BASE/demo.conf
+TARG="latest"
+
+$BASE/bins/$TARG $CONF $*

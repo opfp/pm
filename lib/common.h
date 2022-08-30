@@ -24,7 +24,7 @@
 #include "hydrogen.h" // Need?
 #include "sqlite3.h"
 #include "o_str.h"
-#include "pmsql.h" 
+#include "pmsql.h"
 
 typedef struct {
     sqlite3 * db;
@@ -37,6 +37,13 @@ typedef struct {
     int cooldown;
     char pm_opts; // see idocs for explanation
 } pm_inst;
+
+// typedef struct {
+//     char ukey; // 0 : ukey, 1 : vault
+//     uint8_t salt[SALTSIZE];
+//     uint8_t m_key[M_KEYSIZE];
+//
+// } pm_ent;
 
 #include "cli.h"
 #include "pm.h"
