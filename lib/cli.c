@@ -522,6 +522,9 @@ void _ls_find(pm_inst * PM_INST, char * name, char vault ) {
     if (!all ) {
         return;
     }
+    char * ct = all[1];
+    while (*ct++) {};
+    qsort(&all[1], ct - all[1], sizeof(char *), strcmp_for_qsort );
     int i = 1;
     while ( all[i] ) {
         if ( all[0][i] ) {
@@ -686,7 +689,7 @@ int _delete_val( pm_inst * PM_INST, char * name ) {
 char * FBK_KEY; // No way to get around glob unfortuantely
 char * * _find_by_key( pm_inst * PM_INST, char * tb, char * key, int numres ) {
     char * * all = _all_in_table( PM_INST, tb );
-    //---
+
     if ( !all )
         return NULL;
 
@@ -702,7 +705,7 @@ char * * _find_by_key( pm_inst * PM_INST, char * tb, char * key, int numres ) {
         } else
             c++;
     }
-    //---
+
     c-=1;
     if ( !c )
         return NULL;
@@ -761,7 +764,7 @@ char * * _all_in_table( pm_inst * PM_INST, char * tb_name ) {
 
     if (( ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &stmt, NULL) ))
         goto ait_sql_fail;
-    //--
+
     ecode = sqlite3_step(stmt);
     int i = 1;
     while ( ecode == SQLITE_ROW && i <= rows ) {

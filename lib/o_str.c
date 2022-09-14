@@ -155,3 +155,9 @@ uint32_t o_search(char * res_in, char * key_in ) {// CASE INSENSITIVE
     free(sub_bf);
     return match - sub;
 }
+
+int strcmp_for_qsort(const void *a, const void *b) {
+    const char * c = *(const char **) a; // why? who knows
+    const char * d = *(const char **) b;
+    return strcmp(c, d);
+}

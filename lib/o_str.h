@@ -10,5 +10,7 @@
 // Only supports string. Up to you to free memory after use!
 //char * concat(char *, int, ...); // depreciated
 uint32_t o_search(char *, char *);
+int strcmp_for_qsort(const void *, const void *); 
+
 // uint64_t o_search_l(char *, char *);
 #endif
