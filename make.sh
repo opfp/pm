@@ -1,6 +1,6 @@
 #!/bin/bash
 
-sout="pmerr.txt"
+sout="make.out"
 targ="latest"
 
 if [ "$1" = "-v" ]; then
@@ -10,8 +10,8 @@ fi
 oldt=$(ls -i bins/$targ)
 oldt=${oldt%' '*}
 
-clang lib/pm.c lib/enc.c lib/cli.c lib/o_str.c lib/pmsql.c libhydrogen/hydrogen.c \
-    -std=c11 -I lib -I libhydrogen -lsqlite3 -o bins/$targ 2> $sout
+clang lib/pm.c lib/enc.c lib/cli.c lib/o_str.c lib/pmsql.c lib/libhydrogen/hydrogen.c \
+    -std=c11 -I lib -I lib/libhydrogen -lsqlite3 -o bins/$targ 2> $sout
 
 newt=$(ls -i bins/$targ)
 newt=${newt%' '*}
