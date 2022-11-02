@@ -1,18 +1,27 @@
 #ifndef COMMON
 #define COMMON
 
+// libhydrogen
 #define CONTEXT "pm:psmgr"
 #define OPSLIMIT 10000 // DO we need these 2?
 #define MEMLIMIT 0
 #define THREADS  1
+// pmsql
 #define DATASIZE 64
 #define I_KEYSIZE 32
 #define NAMELEN 32
-
 #define SALTSIZE 9
 #define M_KEYSIZE 23
 //hydro_pwhash_MASTERKEYBYTES = 32 ( immutable for our intents / purposes )
 #define CIPHERSIZE (DATASIZE + hydro_secretbox_HEADERBYTES)
+// pm opts
+#define PIPETOSTDOUT 1
+#define SKIPVAL 2
+#define UKEY 4
+#define OVAULT 8
+#define CONFIRM 16
+#define WARNNOVAL 32
+#define DEFVAULT 64
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -36,14 +45,8 @@ typedef struct {
     int guardian_pid;
     int cooldown;
     char pm_opts; // see idocs for explanation
+    char * conf_path; 
 } pm_inst;
-
-// typedef struct {
-//     char ukey; // 0 : ukey, 1 : vault
-//     uint8_t salt[SALTSIZE];
-//     uint8_t m_key[M_KEYSIZE];
-//
-// } pm_ent;
 
 #include "cli.h"
 #include "pm.h"

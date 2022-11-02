@@ -1,6 +1,6 @@
 #!/bin/bash
 
-sout="/dev/null"
+sout="pmerr.txt"
 targ="latest"
 
 if [ "$1" = "-v" ]; then
@@ -21,6 +21,8 @@ dif=$((newt-oldt))
 if (( $dif > 0 ));
     then
     echo "BUILD SUCCESSFUl"
+    exit 0
 else
     echo "BUILD FAILED"
+    exit 1
 fi

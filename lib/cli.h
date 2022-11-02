@@ -19,8 +19,9 @@ void ls(pm_inst *, char *);
 void lsv(pm_inst *, char *);
 void check(pm_inst *, char *);
 void help(pm_inst *, char *);
+void conf(pm_inst *, char *);
 
-void _ls_find(pm_inst *, char *, char);
+void _ls_find(pm_inst *, char *);
 int _entry_in_table( pm_inst *, char *, char *);
 int _recover_or_forget(pm_inst *, char *, char *, int);
 int _delete(pm_inst *, char *);

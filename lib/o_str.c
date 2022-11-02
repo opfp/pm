@@ -1,5 +1,4 @@
 #include "o_str.h"
-// @ssert args 2-n are all char *
 // TB depreciated - should have just used snprintf
 // char * concat( char * base, int num_ins, ... ){ //currently only supports string
 //     if ( base == NULL )
@@ -68,11 +67,10 @@
 //
 //     return ret;
 // }
-// @ssert : entries are not
-uint32_t o_search(char * res_in, char * key_in ) {// CASE INSENSITIVE
+unsigned o_search(char * res_in, char * key_in ) {// CASE INSENSITIVE
     int res_len = strlen(res_in);
     int key_len = strlen(key_in);
-    if ( res_len > 32 || key_len > 32 ) {
+    if ( res_len > 4 * sizeof(int) || key_len > 4 * sizeof(int) ) {
         //fprintf(stderr, "o_search does not support strings over 32 characters long.\n");
         printf("o_search does not support strings over 32 characters long.\n");
         return 0;
@@ -103,8 +101,8 @@ uint32_t o_search(char * res_in, char * key_in ) {// CASE INSENSITIVE
         return ~0;
     }
 
-    uint32_t match = 0;
-    uint32_t sub = 0;
+    unsigned match = 0;
+    unsigned sub = 0;
     int sub_sz = 2; // size of smallest substring to match
     if ( res_len > 12 )
         sub_sz++; // 3
@@ -159,5 +157,6 @@ uint32_t o_search(char * res_in, char * key_in ) {// CASE INSENSITIVE
 int strcmp_for_qsort(const void *a, const void *b) {
     const char * c = *(const char **) a; // why? who knows
     const char * d = *(const char **) b;
+    // printf("%s ? %s\n",c,d );
     return strcmp(c, d);
 }

@@ -1,6 +1,7 @@
 #include "pm.h"
 
 int main( int argc, char * * argv ) {
+    // printf("av2: %s\n", argv[2] );
     if ( argc < 2 ) {
         printf("pm: headless invocation error. Has pm been installed properly?\n");
         return -1;
@@ -12,6 +13,7 @@ int main( int argc, char * * argv ) {
             " been installed, or your install has been corrupted.\n", argv[1]);
         return -1;
     }
+
     fseek(pm_conf, 0, SEEK_END);
     int pm_conf_sz = ftell(pm_conf);
     rewind(pm_conf); //nesecary?
@@ -24,7 +26,7 @@ int main( int argc, char * * argv ) {
         printf("Your pm configuration file ( %s ) appears to be empty.\n", argv[1]);
         return -1;
     }
-    // echo, noval, unique key
+    // echo, noval, unique key, vault
     const int num_flags = 4;
     char flags[num_flags+1] = "enuv";
     char opts_chr = 0;
@@ -106,6 +108,10 @@ int main( int argc, char * * argv ) {
 
     PM_INST->db = db;
 
+    char * pm_conf_path = malloc(strlen(argv[1]+1));
+    strncpy(pm_conf_path, argv[1], strlen(argv[1])); 
+    PM_INST->conf_path = pm_conf_path;
+
     cli_main(argc - 2 - ( argv[argc-1][0] == '-' ), &argv[2], PM_INST);
 }
 
@@ -113,7 +119,7 @@ int val_pad(char * in) {
     char pad = 0;
     for ( int i = 0; i < DATASIZE; i++ ) {
         unsigned char c = in[i];
-        if ( ( c > 0 && c < 32)  || c == 127 || c == 59) {
+        if ( ( c > 0 && c < 32) || c == 127 || c == 59) {
             return -1;
         }
         if ( c == 0 ){

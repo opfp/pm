@@ -8,24 +8,27 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
     }
     const int num_verbs = 9;
     char * verbs[num_verbs] = { "set", "get", "mkvault", "forg", "rec", "del",
-        "check", "ls", "help" };
+        "check", "ls", "help", "conf" };
     // See idocs for explanation of verb_type
 
-    //                           set, get, mkv, forg, rec, del, chk, ls, help
-    char verb_type[num_verbs] = { 0 , 0  , 1  , 0   , 0  , 0  , 0  , 2 , 0};
+    //                           set, get, mkv, forg, rec, del, chk, ls, help, conf
+    char verb_type[num_verbs] = { 0 , 0  , 1  , 0   , 0  , 0  , 0  , 2 , 0, 0};
     void (*functions[])(pm_inst *, char *) = { set, get, mkvault, forget, recover,
-        delete, check, ls, help };
+        delete, check, ls, help, conf };
 
     int i = 0;
-    for(/*i*/; i < num_verbs; i++ ) {
+    while ( i < num_verbs ) {
         if ( !strcmp(argv[0], verbs[i]) )
             break;
+        ++i;
     }
-    if ( i > (num_verbs - 2) ) {
+    if ( i > num_verbs ) {
+        printf("verb %s unknown\n", argv[0] );
         help(NULL, NULL);
         return;
     }
 
+    char vault_skipval = 0;
     char * vault = NULL;
     char * name = NULL;
     if ( verb_type[i] == 0 ) {
@@ -43,8 +46,16 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
         name = argv[1];
     } else if ( verb_type[i] == 2 ) {
         if ( argc > 1 ) {
-            name = ( argc > 2 ) ? argv[2] : argv[1];
-            vault = ( argc > 2 ) ? argv[1] : NULL;
+            if ( PM_INST->pm_opts & OVAULT ) {
+                vault = argv[1];
+                name = ( argc > 2 ) ? argv[2] : NULL;
+            } else {
+                name = ( argc > 2 ) ? argv[2] : argv[1];
+                vault = ( argc > 2 ) ? argv[1] : NULL;
+            }
+        } else if ( PM_INST->pm_opts & OVAULT ) {
+            vault = "_index";
+            vault_skipval = 1;
         }
     }
     // } else if ( verb_type[i] == 3 ) {
@@ -64,12 +75,12 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
     //     opts = opts >> 1;
     // }
     // ---
-    if (vault) {
+    if (vault && !vault_skipval) {
         if ( !pmsql_safe_in(vault) || strlen(vault) > 15 ) {
             printf("Illegal vault name: %s\n", vault);
             return;
         }
-        if ( PM_INST->pm_opts & 0x40 ) {
+        if ( PM_INST->pm_opts & DEFVAULT ) {
             printf("Vault specified, but pm configured to only use defaults."
                 " [ pm chattr def_vaults 0 ] to enable user created vaults.\n");
             return;
@@ -78,8 +89,8 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
             printf("No vault named %s. [pm mkvault] to make a vault.\n", argv[1]);
             return;
         }
-    } else {
-        vault = ( PM_INST->pm_opts & 4 ) ? "_main_ukey" : "_main_cmk" ;
+    } else if ( !vault_skipval ) {
+        vault = ( PM_INST->pm_opts & UKEY ) ? "_main_ukey" : "_main_cmk" ;
     }
     strcpy(PM_INST->table_name, vault);
 
@@ -89,7 +100,7 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
             return;
         }
     }
-    //printf("%s : %s {%s}\n", verbs[i], name, PM_INST->table_name );
+    // printf("%s : %s {%s}\n", verbs[i], name, PM_INST->table_name );
     (*functions[i])(PM_INST, name);
     return;
 }
@@ -128,7 +139,7 @@ void set(pm_inst * PM_INST, char * name) {
     memcpy(context, ctxt, ctxt_len);
 
     char * check;
-    if ( PM_INST->pm_opts & 16 ) { // if confirm
+    if ( PM_INST->pm_opts & CONFIRM ) { // if confirm
         check = getpass("Confirm your entry:\n");
         // if ( check == NULL )
         //     check = context; // Not a bug - user can bypass by entering nothing
@@ -178,7 +189,7 @@ void set(pm_inst * PM_INST, char * name) {
     memset( master_key, 0, M_KEYSIZE);
 
     char validate = 0;
-    if ( ! (PM_INST->pm_opts & 2) ) { // if not skip validation
+    if ( ! (PM_INST->pm_opts & SKIPVAL) ) { // if not skip validation
         validate = 1;
         memcpy( master_key, PM_INST->master_key + 9, M_KEYSIZE);
     }
@@ -188,7 +199,7 @@ void set(pm_inst * PM_INST, char * name) {
     int * data_sz;
     int * data_tp;
 
-    char ukey = (PM_INST->pm_opts & 4) >> 2;
+    char ukey = (PM_INST->pm_opts & UKEY); // >> 2;
     if ( ukey ) {
         rquery = "INSERT INTO %s (ID,SALT,MASTER_KEY,CIPHER,VIS,VALIDATE) VALUES (?,?,?,?,?,?)";
         data = (void *[6]) { name, salt, master_key, PM_INST->ciphertext, 1, validate };
@@ -342,10 +353,10 @@ void get(pm_inst * PM_INST, char * name) {
             return;
         }
         // turn off val
-        PM_INST->pm_opts |= 2;
+        PM_INST->pm_opts |= SKIPVAL;
     } else {
-        PM_INST->pm_opts |= 2; //Add flag at 2^1 bit (don't validate result)
-        if ( PM_INST->pm_opts & 16 ) { // if warn
+        PM_INST->pm_opts |= SKIPVAL; //Add flag at 2^1 bit (don't validate result)
+        if ( PM_INST->pm_opts & WARNNOVAL ) { // if warn
             printf("Warning: decryption validation disabled. PM will be unable to verify\
                 the output for %s\nTo stop seeing this warning: [ pm setattr warn 0 ]\n", name );
         }
@@ -372,19 +383,19 @@ void get(pm_inst * PM_INST, char * name) {
 }
 
 void forget(pm_inst * PM_INST, char * name) {
-    char * table = (PM_INST->pm_opts & 8) ? "_index" : PM_INST->table_name ;
+    char * table = (PM_INST->pm_opts & OVAULT) ? "_index" : PM_INST->table_name ;
     _recover_or_forget(PM_INST, table, name, 0);
 }
 
 void recover(pm_inst * PM_INST, char * name) {
-    char * table = (PM_INST->pm_opts & 8) ? "_index" : PM_INST->table_name ;
+    char * table = (PM_INST->pm_opts & OVAULT) ? "_index" : PM_INST->table_name ;
     //printf("%i : %s\n", (PM_INST->pm_opts & 8), table  );
     _recover_or_forget(PM_INST, table, name, 1);
 }
 
 void delete(pm_inst * PM_INST, char * name) {
     int name_len = strlen(name);
-    char vault = (PM_INST->pm_opts & 8) >> 3;
+    char vault = (PM_INST->pm_opts & OVAULT);// >> 3;
     char * table = vault ? "_index" : PM_INST->table_name ;
 
     if ( ! _entry_in_table(PM_INST, table, name) ) {
@@ -426,9 +437,10 @@ void mkvault(pm_inst * PM_INST, char * name) {
         if ( _delete_val(PM_INST, name) )
             goto mkv_sql_fail;
     } else if ( exists != 0  ) { // error in _e_i_v
+        printf("mkvault: error in e_i_v\n" );
         return;
     }
-    char ukey = (PM_INST->pm_opts & 4) >>2;
+    char ukey = (PM_INST->pm_opts & UKEY);// >>2;
     char * bquery;
     if (ukey) {
         bquery = "CREATE TABLE %s (ID CHAR(32) PRIMARY KEY, SALT CHAR(9) NOT NULL, "\
@@ -472,7 +484,7 @@ void mkvault(pm_inst * PM_INST, char * name) {
 }
 
 void ls(pm_inst * PM_INST, char * name) {
-    _ls_find(PM_INST, name, (PM_INST->pm_opts & 8) >> 3 ) ;
+    _ls_find(PM_INST, name);// >> 3 ) ;
 }
 
 void check(pm_inst * PM_INST, char * name) {
@@ -489,43 +501,63 @@ void help(pm_inst * PM_INST, char * name) {
     printf("In production, this is a help page.\n");
 }
 
-void _ls_find(pm_inst * PM_INST, char * name, char vault ) {
-    char * table = vault ? "_index" : PM_INST->table_name ;
-    //char * print = vault ? "The Vault" : name;
-    if ( name ) {
-        if ( _entry_in_table( PM_INST, table, name ) ) {
-            printf("%s:%s found. Contents:\n", table, name );
-            if ( vault ) {
-                table = name;
-                goto _ls_printall;
-            }
-            return;
-        }
-        char * * sims = _find_by_key(PM_INST, table, name, 8);
+void conf(pm_inst * PM_INST, char * name){
+    printf("%s\n", PM_INST->conf_path);
+}
 
-        if (!sims ) {
-            printf("%s:%s not found. No similer entries were found either.\n",
-                table, name);
-            return;
+void _ls_find(pm_inst * PM_INST, char * name) {
+    // printf("ls_find(%s, %i)\n", name, vault );
+    char vault = PM_INST->pm_opts & OVAULT;
+    char * table = PM_INST->table_name;
+    if ( vault && ! _entry_in_table(PM_INST, "_index", PM_INST->table_name) ) {
+        if ( strcmp(table,"_index")) {
+            name = PM_INST->table_name;
+            table = "_index";
         }
-        printf("%s:%s not found. See these similar entries:\n", table, name);
-        int i = 1;
-        while(sims[i]) {
-            printf("%i : %s\n",i, sims[i] );
-            ++i;
-        }
-        free(sims);
+        //
+    }
+    printf("name: %s. table: %s\n", name, table );
+
+    if ( name )
+        goto _ls_swithin;
+
+    goto _ls_printall;
+
+    _ls_swithin:
+    if ( _entry_in_table( PM_INST, table, name ) ) {
+        printf("%s:%s found.\n", table, name );
+    }
+
+    char * * sims = _find_by_key(PM_INST, table, name, 8);
+
+    if (!sims ) {
+        printf("%s:%s not found. No similer entries were found either.\n",
+            table, name);
         return;
     }
+    printf("%s:%s not found. See these similar entries:\n", table, name);
+    int i = 1;
+    while(sims[i]) {
+        printf("%i : %s\n",i, sims[i] );
+        ++i;
+    }
+    free(sims);
+    return;
+
     _ls_printall:;
     char * * all = _all_in_table(PM_INST, table );
     if (!all ) {
         return;
     }
-    char * ct = all[1];
+    char * * ct = all+1;
     while (*ct++) {};
-    qsort(&all[1], ct - all[1], sizeof(char *), strcmp_for_qsort );
-    int i = 1;
+    int rows = ct - ( all + 2 );
+    // printf("Counted %i rows\n", rows );
+    // printf("%s\n",*((all+1) + rows) );
+    //--
+    qsort(all+1, rows, sizeof(char *), strcmp_for_qsort );
+    //--
+    i = 1;
     while ( all[i] ) {
         if ( all[0][i] ) {
             if ( vault && name )
@@ -695,7 +727,7 @@ char * * _find_by_key( pm_inst * PM_INST, char * tb, char * key, int numres ) {
 
     int c = 1;
     while ( all[c] ) { // pick out vis=0 and nonsimilar ents
-        //printf("%s\n",all[c] );
+        // printf("%s\n",all[c] );
         if ( !all[0][c] || !o_search(all[c], key) ) {
             all[c] = all[c+1];
             int j = c+1;
@@ -730,6 +762,7 @@ int _fbk_compare( const void * a, const void * b) {
 }
 
 char * * _all_in_table( pm_inst * PM_INST, char * tb_name ) {
+    // printf("all_in_table(%s)\n",tb_name );
     char * bquery = "SELECT COUNT(*) FROM %s";
     size_t query_len = strlen(bquery) + strlen(tb_name);
     char * query = malloc(query_len + 1);
@@ -775,6 +808,7 @@ char * * _all_in_table( pm_inst * PM_INST, char * tb_name ) {
         i++;
         ecode = sqlite3_step(stmt);
     }
+    // printf("Found %i rows\n", i-1 );
     ids[i] = NULL;
     if ( ecode != SQLITE_DONE )
         goto ait_sql_fail;
