@@ -1,6 +1,12 @@
 #!/bin/bash
+
+if [ ! -e .pm_version ]; then 
+    echo No pm version set. version.sh -s [VERSION]; make.sh to rectify 
+    exit 1 
+fi 
+
 BASE=/Users/owen/cs/dev/pm
-CONF=$BASE/pmd.conf
-TARG="latest"
+CONF=$BASE/pmd_rsc/pmd.conf
+TARG=$(cat ".pm_version")
 
 $BASE/bins/$TARG $CONF $*
