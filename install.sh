@@ -1,10 +1,10 @@
 #!/bin/bash 
 
 # base fail - no input 
-if [ -z $1 ]; then 
-    echo "Please pass an install location in your PATH. Exit." 
-    exit 1 
-fi 
+# if [ -z $1 ]; then 
+#     echo "Please pass an install location in your PATH. Exit." 
+#     exit 1 
+# fi 
 # check for able to compile 
 compilers=("gcc", "clang") 
 compiler=""
@@ -26,28 +26,42 @@ if [ -z "$(which sqlite3)" ]; then
     exit 4 
 fi 
 
-# check for target in path 
+# find directory in PATH to put symlink to bin 
 path=$(echo $PATH)
-IFS=':'
-
 pass="F"
 
-for i in $path; do 
+exc_locs=("/usr/local/bin", "/usr/local", "/usr", $1) 
+exc_loc=""
+
+IFS=':'
+for p in $path; do 
     # echo $i
-    if [ $i == $1 ]; then 
-        pass="T" 
+    IFS=','
+    for i in $exc_locs; do 
+        if [ $i == $p ]; then 
+            pass="T" 
+            exc_loc=$p
+            break 
+        fi 
+    done
+    if [ $pass == "T" ]; then 
+        break 
     fi 
+    IFS=':'
 done 
 
+# echo $exc_loc
+# exit 0 
+
 if [ $pass != "T" ]; then 
-    echo $1 not in your PATH. Exit. 
+    #echo $1 not in your PATH. Exit. 
+    echo Could not find a suitable install locaiton. ./install.sh [LOCATION IN YOUR PATH]
     exit 2 
 fi 
 
-# find directory to put binaries, config, db in 
-IFS=","
-ins_locs=("/usr/local/bin", "/usr/local", "/usr", $HOME)
-ins_loc=""
+#binaries, config, db in 
+#IFS=","
+
 
 for d in $ins_locs; do 
     if [ -n $(ls $d) ]; then 
@@ -60,7 +74,7 @@ if [ -z $ins_loc ]; then
     echo Error finding install location. Exit. 
     exit 5 
 fi 
-
+# check for already installed 
 if [ -z $("ls "$ins_loc"/pm")]; then 
     ins_loc=$ins_loc"/pm"    
 elif [ -z ] 
