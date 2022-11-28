@@ -22,7 +22,7 @@ int main( int argc, char * * argv ) {
         printf("Your pm configuration file ( %s ) is too long. Must be less than 2048 bytes\n",
             argv[1]);
         return -1;
-    } else if ( pm_conf_sz == 0 ) {
+    } else if ( pm_conf_sz == 0 ) { // will this occur even in "empty" files? don't unix files need to end in a newline? 
         printf("Your pm configuration file ( %s ) appears to be empty.\n", argv[1]);
         return -1;
     }
@@ -41,7 +41,7 @@ int main( int argc, char * * argv ) {
         }
     }
 
-    // if ( argv[argc-1][0] == '-' && strlen(argv[argc-1]) > 1 ) {
+    // if ( argv[argc-1][0] == '-' && strlen(argv[ar=gc-1]) > 1 ) {
     //     flags_passed = 1;
     //     int i = 0;
     //     char c;
@@ -54,13 +54,18 @@ int main( int argc, char * * argv ) {
     // }
 
     //---
-    char * pm_conf_str = malloc(pm_conf_sz+1);
+    char * pm_conf_str = malloc(pm_conf_sz+2);
+    pm_conf_str[0] = '\n'; 
     pm_conf_str[pm_conf_sz] = 0;
-    fread( pm_conf_str, 1, pm_conf_sz, pm_conf);
+    fread( pm_conf_str+1, 1, pm_conf_sz, pm_conf);
 
     char * att_names[] = { "cooldown" , "db_path" , "confirm_cphr",
          "warn", "def_tables" };
     char * * atts = get_atts_conf( pm_conf_str, 5, att_names);
+
+    for ( int i = 0; i < 5; i++ ) { 
+        printf("%s : %s\n", att_names[i], atts[i] ); 
+    } 
 
     if ( !atts ) {
         printf("Issue with %s. Has pm been installed / configured correctly?\n", argv[1]);
@@ -129,22 +134,34 @@ int val_pad(char * in) {
     return 0;
 }
 
-char * * get_atts_conf( char * conf_str, int attc, char * * att_map) {
-    if ( !conf_str || !att_map )
+char * * get_atts_conf( char * conf_str, int attc, char * * att_keys) {
+    if ( !conf_str || !att_keys )
         return NULL;
 
     char * * ret = malloc( attc * sizeof(char *) );
     for( int i = 0; i < attc; i++ ) {
-        char * this_attr = strstr(conf_str, att_map[i]);
-        if (!this_attr)
-            return NULL;
+        char * this_attr = strstr(conf_str, att_keys[i]);
+        _get_atts_conf_check_atv:; 
+        if (!this_attr) { 
+            // printf("key %s not found, ret null\n", att_keys[i] ); 
+            ret[i] = NULL;
+            continue; 
+        } 
+        // if key is not begining of newline (note that 0x1 is a controll char used by this function which means 
+        // end of this attribute key's value 
+        if ( ! ( *(this_attr - 1) == '\n' || *(this_attr - 1) == 1 ) ) { 
+            // printf("key %s found in invalid location, prior char: %x\n", att_keys[i], *(this_attr-1) ); 
+            this_attr = strstr(this_attr + 1, att_keys[i]); 
+            goto _get_atts_conf_check_atv; 
+        } 
+        
         // all this is so keys which are also values don't cause trouble
-        while ( *(this_attr+strlen(att_map[i])) != '=' ) {
-            printf("%s\n", this_attr );
-            this_attr = strstr(this_attr + 1, att_map[i]);
-            if ( !this_attr )
-                return NULL;
-        }
+        // while ( *(this_attr+strlen(att_map[i])) != '=' ) {
+        //     // printf("%s\n", this_attr );
+        //     this_attr = strstr(this_attr + 1, att_map[i]);
+        //     if ( !this_attr )
+        //         return NULL;
+        // }
         this_attr = strchr(this_attr, '=')+1;
         *(strchr(this_attr, '\n')) = 1; // flag for put 0 here later
         ret[i] = this_attr;

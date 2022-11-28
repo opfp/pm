@@ -32,6 +32,9 @@ if (( $dif > 0 ));
     exit 0
 else
     echo "BUILD FAILED"
+    if [ "$i" != "-v" ]; then 
+        eval "cat make.out" 
+    fi 
     exit 1
 fi
 
