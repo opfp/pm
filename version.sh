@@ -1,3 +1,5 @@
+#!/bin/bash 
+
 if [ "$1" == "-s" ]; then 
     if [ -z $2 ]; then 
         echo set: no version specified. 
