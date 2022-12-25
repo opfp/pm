@@ -27,12 +27,14 @@ int main( int argc, char * * argv ) {
         return -1;
     }
     // echo, noval, unique key, vault
-    const int num_flags = 4;
-    char flags[num_flags+1] = "enuv";
+    #ifndef NUM_FLAGS 
+    #define NUM_FLAGS 4 
+    #endif
+    char flags[NUM_FLAGS+1] = "enuv";
     char opts_chr = 0;
 
     if (argv[argc-1][0] == '-' ) {
-        for( int i = 0; i < num_flags; i++ ) {
+        for( int i = 0; i < NUM_FLAGS; i++ ) {
             char * match;
             if (( match = strchr(argv[argc-1], flags[i]) )) {
                 //printf("%c in opts\n", flags[i] );
