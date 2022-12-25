@@ -516,7 +516,7 @@ void _ls_find(pm_inst * PM_INST, char * name) {
         }
         //
     }
-    printf("name: %s. table: %s\n", name, table );
+    // printf("name: %s. table: %s\n", name, table );
 
     if ( name )
         goto _ls_swithin;
