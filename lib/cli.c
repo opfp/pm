@@ -9,7 +9,7 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
     #ifndef NUM_VERBS
     #define NUM_VERBS 10 
     #endif 
-    char * verbs[NUM_VERBS] = { "set", "get", "mkvault", "forg", "rec", "del",
+    char * verbs[NUM_VERBS] = { "set", "get", "mkv", "forg", "rec", "del",
         "check", "ls", "help", "conf" };
     // See idocs for explanation of verb_type
 
@@ -490,15 +490,13 @@ void ls(pm_inst * PM_INST, char * name) {
 }
 
 void check(pm_inst * PM_INST, char * name) {
-    // printf("Check does nothing right now\n");
-    // return;
-    char * bquery = "SELECT UKEY from _index WHERE ID = ?";
-
-
+    printf("Check does nothing right now\n");
+    return;
+    // char * bquery = "SELECT UKEY from _index WHERE ID = ?";
 
 }
 
-// only takes these args for ease of calling. ignores them
+// only takes these args for ease of calling. ignores them (nesecary?) 
 void help(pm_inst * PM_INST, char * name) {
     printf("In production, this is a help page.\n");
 }
