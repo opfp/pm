@@ -27,12 +27,14 @@ int main( int argc, char * * argv ) {
         return -1;
     }
     // echo, noval, unique key, vault
-    const int num_flags = 4;
-    char flags[num_flags+1] = "enuv";
+    #ifndef NUM_FLAGS 
+    #define NUM_FLAGS 4 
+    #endif
+    char flags[NUM_FLAGS+1] = "enuv";
     char opts_chr = 0;
 
     if (argv[argc-1][0] == '-' ) {
-        for( int i = 0; i < num_flags; i++ ) {
+        for( int i = 0; i < NUM_FLAGS; i++ ) {
             char * match;
             if (( match = strchr(argv[argc-1], flags[i]) )) {
                 //printf("%c in opts\n", flags[i] );
@@ -134,38 +136,39 @@ int val_pad(char * in) {
     return 0;
 }
 
-char * * get_atts_conf( char * conf_str, int attc, char * * att_keys) {
-    if ( !conf_str || !att_keys )
+char * * get_atts_conf( char * conf_str, int attc, char * * att_map) {
+    if ( !conf_str || !att_map )
         return NULL;
 
     char * * ret = malloc( attc * sizeof(char *) );
     for( int i = 0; i < attc; i++ ) {
-        char * this_attr = strstr(conf_str, att_keys[i]);
-        _get_atts_conf_check_atv:; 
+        char * this_attr = strstr(conf_str, att_map[i]);
+        _found_att_ck:; 
         if (!this_attr) { 
-            // printf("key %s not found, ret null\n", att_keys[i] ); 
             ret[i] = NULL;
             continue; 
+        }
+        if ( *(this_attr+strlen(att_map[i])) != '=' || ( *(this_attr-1) != 1 && *(this_attr-1) != '\n' ) ) { 
+            this_attr = strstr(this_attr + 1, att_map[i]);
+            goto _found_att_ck; 
         } 
-        // if key is not begining of newline (note that 0x1 is a controll char used by this function which means 
-        // end of this attribute key's value 
-        if ( ! ( *(this_attr - 1) == '\n' || *(this_attr - 1) == 1 ) ) { 
-            // printf("key %s found in invalid location, prior char: %x\n", att_keys[i], *(this_attr-1) ); 
-            this_attr = strstr(this_attr + 1, att_keys[i]); 
-            goto _get_atts_conf_check_atv; 
-        } 
-        
-        // all this is so keys which are also values don't cause trouble
+
+        // // all this is so keys which are also values don't cause trouble
         // while ( *(this_attr+strlen(att_map[i])) != '=' ) {
         //     // printf("%s\n", this_attr );
         //     this_attr = strstr(this_attr + 1, att_map[i]);
         //     if ( !this_attr )
         //         return NULL;
         // }
-        this_attr = strchr(this_attr, '=')+1;
+        // this_attr = strchr(this_attr, '=')+1;
         *(strchr(this_attr, '\n')) = 1; // flag for put 0 here later
-        ret[i] = this_attr;
+        ret[i] = this_attr+strlen(att_map[i])+1;
     }
+    // char * rv = conf_str; 
+    // while ( *(rv=strchr(rv,1))=0) { 
+    //     ++rv; 
+    // } 
+    
     char * rover = strchr(conf_str, 1);
     while (rover) {
         *rover++ = 0;

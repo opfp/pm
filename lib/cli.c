@@ -6,23 +6,25 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
         //help(void, void);
         return;
     }
-    const int num_verbs = 9;
-    char * verbs[num_verbs] = { "set", "get", "mkvault", "forg", "rec", "del",
+    #ifndef NUM_VERBS
+    #define NUM_VERBS 10 
+    #endif 
+    char * verbs[NUM_VERBS] = { "set", "get", "mkv", "forg", "rec", "del",
         "check", "ls", "help", "conf" };
     // See idocs for explanation of verb_type
 
     //                           set, get, mkv, forg, rec, del, chk, ls, help, conf
-    char verb_type[num_verbs] = { 0 , 0  , 1  , 0   , 0  , 0  , 0  , 2 , 0, 0};
+    char verb_type[NUM_VERBS] = { 0 , 0  , 1  , 0   , 0  , 0  , 0  , 2 , 0, 0};
     void (*functions[])(pm_inst *, char *) = { set, get, mkvault, forget, recover,
         delete, check, ls, help, conf };
 
     int i = 0;
-    while ( i < num_verbs ) {
+    while ( i < NUM_VERBS ) {
         if ( !strcmp(argv[0], verbs[i]) )
             break;
         ++i;
     }
-    if ( i > num_verbs ) {
+    if ( i > NUM_VERBS ) {
         printf("verb %s unknown\n", argv[0] );
         help(NULL, NULL);
         return;
@@ -488,15 +490,13 @@ void ls(pm_inst * PM_INST, char * name) {
 }
 
 void check(pm_inst * PM_INST, char * name) {
-    // printf("Check does nothing right now\n");
-    // return;
-    char * bquery = "SELECT UKEY from _index WHERE ID = ?";
-
-
+    printf("Check does nothing right now\n");
+    return;
+    // char * bquery = "SELECT UKEY from _index WHERE ID = ?";
 
 }
 
-// only takes these args for ease of calling. ignores them
+// only takes these args for ease of calling. ignores them (nesecary?) 
 void help(pm_inst * PM_INST, char * name) {
     printf("In production, this is a help page.\n");
 }
@@ -516,7 +516,7 @@ void _ls_find(pm_inst * PM_INST, char * name) {
         }
         //
     }
-    printf("name: %s. table: %s\n", name, table );
+    // printf("name: %s. table: %s\n", name, table );
 
     if ( name )
         goto _ls_swithin;

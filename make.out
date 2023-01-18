@@ -1,0 +1,93 @@
+lib/enc.c:84:14: warning: passing 'uint8_t [32]' to parameter of type 'char *' converts between pointers to integer types where one is of the unique plain 'char' type and the other is not [-Wpointer-sign]
+    strncpy( PM_INST->master_key, m_key, SALTSIZE + M_KEYSIZE);
+             ^~~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/secure/_string.h:128:28: note: expanded from macro 'strncpy'
+                __builtin___strncpy_chk (dest, __VA_ARGS__, __darwin_obsz (dest))
+                                         ^~~~
+lib/enc.c:104:16: warning: passing 'uint8_t [64]' to parameter of type 'const char *' converts between pointers to integer types where one is of the unique plain 'char' type and the other is not [-Wpointer-sign]
+        strlen(PM_INST->plaintext), 0, CONTEXT, PM_INST->derived_key);
+               ^~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/string.h:82:28: note: passing argument to parameter '__s' here
+size_t   strlen(const char *__s);
+                            ^
+lib/enc.c:138:21: warning: address of array 'PM_INST->plaintext' will always evaluate to 'true' [-Wpointer-bool-conversion]
+    if ( ! PM_INST->plaintext ) {
+         ~ ~~~~~~~~~^~~~~~~~~
+lib/enc.c:151:17: warning: passing 'uint8_t [64]' to parameter of type 'char *' converts between pointers to integer types where one is of the unique plain 'char' type and the other is not [-Wpointer-sign]
+        strncpy(PM_INST->plaintext, pswd, pswd_len); //null term??
+                ^~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/secure/_string.h:128:28: note: expanded from macro 'strncpy'
+                __builtin___strncpy_chk (dest, __VA_ARGS__, __darwin_obsz (dest))
+                                         ^~~~
+lib/enc.c:154:27: warning: passing 'uint8_t [64]' to parameter of type 'const char *' converts between pointers to integer types where one is of the unique plain 'char' type and the other is not [-Wpointer-sign]
+        pswd_len = strlen(PM_INST->plaintext);
+                          ^~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/string.h:82:28: note: passing argument to parameter '__s' here
+size_t   strlen(const char *__s);
+                            ^
+lib/enc.c:161:37: warning: passing 'uint8_t [64]' to parameter of type 'const char *' converts between pointers to integer types where one is of the unique plain 'char' type and the other is not [-Wpointer-sign]
+    char * user_derived_key = crypt(PM_INST->plaintext, salt);
+                                    ^~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/unistd.h:544:25: note: passing argument to parameter here
+char    *crypt(const char *, const char *);
+                           ^
+lib/enc.c:161:57: warning: passing 'uint8_t [9]' to parameter of type 'const char *' converts between pointers to integer types where one is of the unique plain 'char' type and the other is not [-Wpointer-sign]
+    char * user_derived_key = crypt(PM_INST->plaintext, salt);
+                                                        ^~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/unistd.h:544:39: note: passing argument to parameter here
+char    *crypt(const char *, const char *);
+                                         ^
+lib/enc.c:170:9: warning: passing 'uint8_t [64]' to parameter of type 'const char *' converts between pointers to integer types where one is of the unique plain 'char' type and the other is not [-Wpointer-sign]
+        PM_INST->plaintext, pswd_len, CONTEXT, user_derived_key, OPSLIMIT, MEMLIMIT, THREADS);
+        ^~~~~~~~~~~~~~~~~~
+lib/libhydrogen/hydrogen.h:270:70: note: passing argument to parameter 'passwd' here
+int hydro_pwhash_deterministic(uint8_t *h, size_t h_len, const char *passwd, size_t passwd_len,
+                                                                     ^
+lib/enc.c:170:48: warning: passing 'char *' to parameter of type 'const uint8_t *' (aka 'const unsigned char *') converts between pointers to integer types where one is of the unique plain 'char' type and the other is not [-Wpointer-sign]
+        PM_INST->plaintext, pswd_len, CONTEXT, user_derived_key, OPSLIMIT, MEMLIMIT, THREADS);
+                                               ^~~~~~~~~~~~~~~~
+lib/libhydrogen/hydrogen.h:272:46: note: passing argument to parameter 'master_key' here
+                               const uint8_t master_key[hydro_pwhash_MASTERKEYBYTES],
+                                             ^
+lib/enc.c:185:26: warning: passing 'uint8_t [64]' to parameter of type 'const char *' converts between pointers to integer types where one is of the unique plain 'char' type and the other is not [-Wpointer-sign]
+    char * emsg = strchr(PM_INST->plaintext, ';');
+                         ^~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/string.h:76:26: note: passing argument to parameter '__s' here
+char    *strchr(const char *__s, int __c);
+                            ^
+10 warnings generated.
+lib/cli.c:207:75: warning: incompatible integer to pointer conversion initializing 'void *' with an expression of type 'int' [-Wint-conversion]
+        data = (void *[6]) { name, salt, master_key, PM_INST->ciphertext, 1, validate };
+                                                                          ^
+lib/cli.c:207:78: warning: incompatible integer to pointer conversion initializing 'void *' with an expression of type 'char' [-Wint-conversion]
+        data = (void *[6]) { name, salt, master_key, PM_INST->ciphertext, 1, validate };
+                                                                             ^~~~~~~~
+lib/cli.c:213:63: warning: incompatible integer to pointer conversion initializing 'void *' with an expression of type 'int' [-Wint-conversion]
+        data = (void *[5]) { name, salt, PM_INST->ciphertext, 1, validate };
+                                                              ^
+lib/cli.c:213:66: warning: incompatible integer to pointer conversion initializing 'void *' with an expression of type 'char' [-Wint-conversion]
+        data = (void *[5]) { name, salt, PM_INST->ciphertext, 1, validate };
+                                                                 ^~~~~~~~
+lib/cli.c:306:10: warning: incompatible pointer types assigning to 'void **' from 'char *[1]' [-Wincompatible-pointer-types]
+    data = ( char * [1] ) { name };
+         ^ ~~~~~~~~~~~~~~~~~~~~~~~
+lib/cli.c:352:35: warning: passing 'uint8_t [64]' to parameter of type 'const char *' converts between pointers to integer types where one is of the unique plain 'char' type and the other is not [-Wpointer-sign]
+        if ( strcmp(i_mkey, crypt(PM_INST->plaintext, i_salt) ) ) {
+                                  ^~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/unistd.h:544:25: note: passing argument to parameter here
+char    *crypt(const char *, const char *);
+                           ^
+lib/cli.c:471:44: warning: incompatible integer to pointer conversion initializing 'void *' with an expression of type 'char' [-Wint-conversion]
+    void * * data = ( void * [2] ) { name, ukey };
+                                           ^~~~
+lib/cli.c:805:22: warning: passing 'const unsigned char *' to parameter of type 'const char *' converts between pointers to integer types where one is of the unique plain 'char' type and the other is not [-Wpointer-sign]
+        strcpy(this, sqlite3_column_text(stmt, 0) );
+                     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/secure/_string.h:84:33: note: expanded from macro 'strcpy'
+                __builtin___strcpy_chk (dest, __VA_ARGS__, __darwin_obsz (dest))
+                                              ^~~~~~~~~~~
+8 warnings generated.
+lib/pmsql.c:51:66: warning: cast to smaller integer type 'int' from 'void *' [-Wvoid-pointer-to-int-cast]
+            bind_res[i] = sqlite3_bind_int(base_stmt->stmt, i+1, (int) bind_data[i] );
+                                                                 ^~~~~~~~~~~~~~~~~~
+1 warning generated.
