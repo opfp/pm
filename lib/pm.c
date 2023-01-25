@@ -65,9 +65,9 @@ int main( int argc, char * * argv ) {
          "warn", "def_tables" };
     char * * atts = get_atts_conf( pm_conf_str, 5, att_names);
 
-    for ( int i = 0; i < 5; i++ ) { 
-        printf("%s : %s\n", att_names[i], atts[i] ); 
-    } 
+    // for ( int i = 0; i < 5; i++ ) { 
+    //     printf("%s : '%s'\n", att_names[i], atts[i] ); 
+    // } 
 
     if ( !atts ) {
         printf("Issue with %s. Has pm been installed / configured correctly?\n", argv[1]);
@@ -161,7 +161,10 @@ char * * get_atts_conf( char * conf_str, int attc, char * * att_map) {
         //         return NULL;
         // }
         // this_attr = strchr(this_attr, '=')+1;
-        *(strchr(this_attr, '\n')) = 1; // flag for put 0 here later
+        char * eoa = this_attr; 
+        char c; 
+        while ( (c = *eoa++) && c != '\n' && c != ' ' ) { } 
+        *(eoa-1) = 1; // flag for put 0 here later
         ret[i] = this_attr+strlen(att_map[i])+1;
     }
     // char * rv = conf_str; 
