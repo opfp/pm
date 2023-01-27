@@ -9,7 +9,8 @@
 // pmsql
 #define DATASIZE 64
 #define I_KEYSIZE 32
-#define NAMELEN 32
+#define NAMESIZE 32
+#define VAULTNAMESIZE 16 
 #define SALTSIZE 9
 #define M_KEYSIZE 23
 //hydro_pwhash_MASTERKEYBYTES = 32 ( immutable for our intents / purposes )
@@ -30,7 +31,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "hydrogen.h" // Need?
+#include "hydrogen.h" 
 #include "sqlite3.h"
 #include "o_str.h"
 #include "pmsql.h"
