@@ -2,7 +2,7 @@
 #define COMMON
 
 // libhydrogen
-#define CONTEXT "pm:psmgr"
+#define CONTEXT "pm:psmgr" // should this be static? 
 #define OPSLIMIT 10000 // DO we need these 2?
 #define MEMLIMIT 0
 #define THREADS  1

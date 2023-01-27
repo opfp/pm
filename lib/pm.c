@@ -56,9 +56,10 @@ int main( int argc, char * * argv ) {
     // }
 
     //---
-    char * pm_conf_str = malloc(pm_conf_sz+1);
-    pm_conf_str[pm_conf_sz] = 0;
-    fread( pm_conf_str, 1, pm_conf_sz, pm_conf);
+    char * pm_conf_str = malloc(pm_conf_sz+2);
+    pm_conf_str[pm_conf_sz+1] = 0;
+    pm_conf_str[0] = 1; 
+    fread( pm_conf_str+1, 1, pm_conf_sz, pm_conf);
 
     char * att_names[] = { "cooldown" , "db_path" , "confirm_cphr",
          "warn", "def_tables" };
@@ -138,19 +139,32 @@ char * * get_atts_conf( char * conf_str, int attc, char * * att_map) {
     char * * ret = malloc( attc * sizeof(char *) );
     for( int i = 0; i < attc; i++ ) {
         char * this_attr = strstr(conf_str, att_map[i]);
-        if (!this_attr)
-            return NULL;
-        // all this is so keys which are also values don't cause trouble
-        while ( *(this_attr+strlen(att_map[i])) != '=' ) {
-            printf("%s\n", this_attr );
-            this_attr = strstr(this_attr + 1, att_map[i]);
-            if ( !this_attr )
-                return NULL;
+        _found_att_ck:; 
+        if (!this_attr) { 
+            ret[i] = NULL;
+            continue; 
         }
-        this_attr = strchr(this_attr, '=')+1;
+        if ( *(this_attr+strlen(att_map[i])) != '=' || ( *(this_attr-1) != 1 && *(this_attr-1) != '\n' ) ) { 
+            this_attr = strstr(this_attr + 1, att_map[i]);
+            goto _found_att_ck; 
+        } 
+
+        // // all this is so keys which are also values don't cause trouble
+        // while ( *(this_attr+strlen(att_map[i])) != '=' ) {
+        //     // printf("%s\n", this_attr );
+        //     this_attr = strstr(this_attr + 1, att_map[i]);
+        //     if ( !this_attr )
+        //         return NULL;
+        // }
+        // this_attr = strchr(this_attr, '=')+1;
         *(strchr(this_attr, '\n')) = 1; // flag for put 0 here later
-        ret[i] = this_attr;
+        ret[i] = this_attr+strlen(att_map[i])+1;
     }
+    // char * rv = conf_str; 
+    // while ( *(rv=strchr(rv,1))=0) { 
+    //     ++rv; 
+    // } 
+    
     char * rover = strchr(conf_str, 1);
     while (rover) {
         *rover++ = 0;
