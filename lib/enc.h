@@ -2,6 +2,7 @@
 #define ENC
 
 #include "common.h"
+#include <crypt.h> 
 
 int enc_plaintext( pm_inst *);
 int dec_ciphertext( pm_inst *);

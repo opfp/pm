@@ -30,7 +30,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "hydrogen.h" // Need?
+#include "libhydrogen/hydrogen.h" // Need?
 #include "sqlite3.h"
 #include "o_str.h"
 #include "pmsql.h"
