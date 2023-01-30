@@ -30,6 +30,7 @@
 #include <signal.h>
 #include <time.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "hydrogen.h" 
 #include "sqlite3.h"
