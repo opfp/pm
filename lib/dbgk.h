@@ -9,16 +9,16 @@
 #define DBGK_HSWRITE 2 
 #define DBGK_NOIO 3 
 
-#define DBGK_MSGHEADER_KEEPAWAKE 1 
-#define DBGK_MSGHEADER_UNAUTHREQ 2 
-// #define DBGK_MSGHEADER_AUTHREQ 3 
-#define DBGK_MSGHEADER_ERRMSG 4
-#define DBGK_MSGHEADER_SHORTRESP 5 
-#define DBGH_MSGHEADER_LONGRESP 6 
+#define DBGK_MSGHEADER_KEEPAWAKE 0 //(type) 
+#define DBGK_MSGHEADER_ERRMSG 2// (type, keys {as a string l<=255} ) 
+#define DBGK_MSGHEADER_SHORTRESP 3 // (type, keys {as a string l<=255} ) 
+#define DBGK_MSGHEADER_UNAUTHREQ 4 //(*) 
+#define DBGH_MSGHEADER_LONGRESP 5 // (*) 
 
 typedef struct { 
     int status; 
-    void * protected_buffer; 
+    void * pbuff;
+    size_t pbuff_sz;  
     // char * msg; 
     pthread_mutex_t * mux;
     pthread_cond_t * io_flag; 

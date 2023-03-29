@@ -1,0 +1,23 @@
+
+# internal notes
+sbox
+idocs.txt
+
+# don't waste space 
+libhydrogen-master.zip
+sqlite.zip
+
+# confidental 
+rsc/pswds.db
+pmd_rsc/pmd.db
+
+# not ready yet 
+tests 
+test.sh
+manpm.txt
+docs.txt
+ 
+# build results 
+bins
+make.out 
+
