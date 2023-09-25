@@ -7,6 +7,7 @@ LIBS = -lsqlite3
 
 SDIR = src
 ODIR = src/obj
+BDIR = bins
 
 VERSION := $(shell cat .version) 
 
@@ -19,9 +20,11 @@ all: build
 
 # Rule to build the 'build' binary
 build: $(OBJS) 
-	$(CC) -o bins/pm$(VERSION) $^ $(CFLAGS) $(LIBS)
+	$(CC) -o $(BDIR)/pm$(VERSION) $^ $(CFLAGS) $(LIBS)
 
-#debug: 
+# make debuginfos and don't optimize 
+# debug: $(OBJS)  
+# 	$(CC) -o $(BDIR)/pm$(VERSION) $^ $(DEBUGFLAGS) $(LIBS) 	
 
 # Rule to compile individual source files into object files
 $(ODIR)/%.o: $(SDIR)/%.c $(LDIR)/%.h
@@ -30,3 +33,5 @@ $(ODIR)/%.o: $(SDIR)/%.c $(LDIR)/%.h
 # Clean target to remove object files
 clean:
 	rm -fv $(ODIR)/*.o
+	rm -fv $(ODIR)/*.dSYM 
+	
