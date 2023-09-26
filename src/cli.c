@@ -24,7 +24,7 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
             break;
         ++i;
     }
-    if ( i > NUM_VERBS ) {
+    if ( i == NUM_VERBS ) {
         printf("verb %s unknown\n", argv[0] );
         help(NULL, NULL);
         return;

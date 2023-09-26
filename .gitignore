@@ -1,5 +1,5 @@
 src/obj
 legacy_scripts
-pmd 
-pmd_rsc
+pmd_rsc/pmd.db 
 bins
+*.swp 
