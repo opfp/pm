@@ -1,6 +1,18 @@
 # include "cli.h"
 
-void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
+//enum verb_type { 
+
+// private function declarations
+void _ls_find(pm_inst *, char *);
+int _entry_in_table( pm_inst *, char *, char *);
+int _recover_or_forget(pm_inst *, char *, char *, int);
+int _delete(pm_inst *, char *);
+int _delete_val(pm_inst *, char *);
+char * * _find_by_key( pm_inst *, char *, char *, int);
+int _fbk_compare( const void *, const void *);
+char * * _all_in_table(pm_inst *, char *);
+
+void cli_main( int argc, char * * argv, pm_inst * pm_monolith) {
     if ( argc < 1 ) {
         printf("pm: Not enough arguments. [pm help] for help, or read the docs.\n");
         //help(void, void);
@@ -48,14 +60,14 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
         name = argv[1];
     } else if ( verb_type[i] == 2 ) {
         if ( argc > 1 ) {
-            if ( PM_INST->pm_opts & OVAULT ) {
+            if ( pm_monolith->pm_opts & OVAULT ) {
                 vault = argv[1];
                 name = ( argc > 2 ) ? argv[2] : NULL;
             } else {
-                name = ( argc > 2 ) ? argv[2] : argv[1];
                 vault = ( argc > 2 ) ? argv[1] : NULL;
+                name = ( argc > 2 ) ? argv[2] : argv[1];
             }
-        } else if ( PM_INST->pm_opts & OVAULT ) {
+        } else if ( pm_monolith->pm_opts & OVAULT ) {
             vault = "_index";
             vault_skipval = 1;
         }
@@ -71,7 +83,7 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
     // --- testing ---
     // char * option_names[] = { "Echo", "Skip pswd hash val", "Use ukey vault",
     //     "vault" , "Confirm cipertexts" , "Warn on no validation" , "Use only default vaults"};
-    // unsigned char opts = PM_INST->pm_opts;
+    // unsigned char opts = pm_monolith->pm_opts;
     // for ( int i = 0; i < 7; i++) {
     //     printf("%i : %s\n", ( opts & 1 ), option_names[i]);
     //     opts = opts >> 1;
@@ -82,19 +94,19 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
             printf("Illegal vault name: %s\n", vault);
             return;
         }
-        if ( PM_INST->pm_opts & DEFVAULT ) {
+        if ( pm_monolith->pm_opts & DEFVAULT ) {
             printf("Vault specified, but pm configured to only use defaults."
                 " [ pm chattr def_vaults 0 ] to enable user created vaults.\n");
             return;
         }
-        if ( !_entry_in_table(PM_INST, "_index", argv[1]) && !verb_type[i] ) {
+        if ( !_entry_in_table(pm_monolith, "_index", argv[1]) && !verb_type[i] ) {
             printf("No vault named %s. [pm mkvault] to make a vault.\n", argv[1]);
             return;
         }
     } else if ( !vault_skipval ) {
-        vault = ( PM_INST->pm_opts & UKEY ) ? "_main_ukey" : "_main_cmk" ;
+        vault = ( pm_monolith->pm_opts & UKEY ) ? "_main_ukey" : "_main_cmk" ;
     }
-    strcpy(PM_INST->table_name, vault);
+    strcpy(pm_monolith->table_name, vault);
 
     if (name) {
         if ( !pmsql_safe_in(name) || strlen(name) > 31 ) {
@@ -102,23 +114,32 @@ void cli_main( int argc, char * * argv, pm_inst * PM_INST) {
             return;
         }
     }
-    // printf("%s : %s {%s}\n", verbs[i], name, PM_INST->table_name );
-    (*functions[i])(PM_INST, name);
+    // printf("%s : %s {%s}\n", verbs[i], name, pm_monolith->table_name );
+    (*functions[i])(pm_monolith, name);
     return;
 }
 
-void set(pm_inst * PM_INST, char * name) {
+//void cli_new( int argc, char * * argv, pm_inst * pm_monolith) {
+//    if ( argc < 1 ) {
+//        printf("pm: verb required. [pm help] for help, or read the docs.\n");
+//        //help(void, void);
+//        return;
+//    }
+//		/* pm [verb] [name] [kwargs . . . ] */ 
+//}
+
+void set(pm_inst * pm_monolith, char * name) {
     int name_len = strlen(name);
-    char exists = _entry_in_table(PM_INST, PM_INST->table_name, name);
+    char exists = _entry_in_table(pm_monolith, pm_monolith->table_name, name);
     if ( exists == 2 ) {
-        printf("Set: an entry with name %s already exists in %s.\n", name, PM_INST->table_name );
+        printf("Set: an entry with name %s already exists in %s.\n", name, pm_monolith->table_name );
         return;
     } else if ( exists == 1 ) { //Entry exists but is in trash, will be overwritten.
-        if ( _delete(PM_INST, name) )
-            printf("Set: backend error in _delete: %s\n", sqlite3_errmsg(PM_INST->db) );
+        if ( _delete(pm_monolith, name) )
+            printf("Set: backend error in _delete: %s\n", sqlite3_errmsg(pm_monolith->db) );
     }
 
-    char * rprompt = "Enter the ciphertext for the entry %:\n";
+    char * rprompt = "Enter the ciphertext for the entry %s:\n";
     char * prompt = malloc(strlen(rprompt) + strlen(name) + 1);
     sprintf(prompt, rprompt, name);
     char * ctxt = getpass(prompt);
@@ -141,7 +162,7 @@ void set(pm_inst * PM_INST, char * name) {
     memcpy(context, ctxt, ctxt_len);
 
     char * check;
-    if ( PM_INST->pm_opts & CONFIRM ) { // if confirm
+    if ( pm_monolith->pm_opts & CONFIRM ) { // if confirm
         check = getpass("Confirm your entry:\n");
         // if ( check == NULL )
         //     check = context; // Not a bug - user can bypass by entering nothing
@@ -158,17 +179,17 @@ void set(pm_inst * PM_INST, char * name) {
         goto set_cleanup;
     }
     //Add plaintext to pm_inst obj
-    memcpy(PM_INST->plaintext, context, DATASIZE);
+    memcpy(pm_monolith->plaintext, context, DATASIZE);
 
     memset(ctxt, 0, ctxt_len);
     ctxt = NULL;
     memset(context, 0, DATASIZE);
 
-    int enc_code = enc_plaintext(PM_INST);
+    int enc_code = enc_plaintext(pm_monolith);
 
     if ( enc_code == -2 ) {
         printf("Set: Wrong password for vault %s. Use -u to make an arbitrary key entry\n",
-            PM_INST->table_name);
+            pm_monolith->table_name);
         return; // We're free to just return because we've already destroyed our sensitive data (and so had enc)
     } else if ( enc_code == -4) {
         printf("Set: Commkey / ukey mismatch. Toggle -u to fix\n");
@@ -177,7 +198,7 @@ void set(pm_inst * PM_INST, char * name) {
         printf("Set: PMSQL error in enc.\n");
         return;
     } else if ( enc_code == -1) {
-        printf("Set: SQL error: %s\n", sqlite3_errmsg(PM_INST->db) );
+        printf("Set: SQL error: %s\n", sqlite3_errmsg(pm_monolith->db) );
         return;
     } else if ( enc_code < 0 ) {
         printf("Set: Unknown error in enc.\n");
@@ -186,14 +207,14 @@ void set(pm_inst * PM_INST, char * name) {
 
     // Build sqlite3 statement to insert the cipher, validate key etc
     uint8_t salt[SALTSIZE];
-    memcpy(salt, PM_INST->master_key, SALTSIZE);
+    memcpy(salt, pm_monolith->master_key, SALTSIZE);
     uint8_t master_key[M_KEYSIZE];
     memset( master_key, 0, M_KEYSIZE);
 
     char validate = 0;
-    if ( ! (PM_INST->pm_opts & SKIPVAL) ) { // if not skip validation
+    if ( ! (pm_monolith->pm_opts & SKIPVAL) ) { // if not skip validation
         validate = 1;
-        memcpy( master_key, PM_INST->master_key + 9, M_KEYSIZE);
+        memcpy( master_key, pm_monolith->master_key + 9, M_KEYSIZE);
     }
     // bruh this turned out to be the same length
     char * rquery;
@@ -201,39 +222,39 @@ void set(pm_inst * PM_INST, char * name) {
     int * data_sz;
     int * data_tp;
 
-    char ukey = (PM_INST->pm_opts & UKEY); // >> 2;
+    char ukey = (pm_monolith->pm_opts & UKEY); // >> 2;
     if ( ukey ) {
         rquery = "INSERT INTO %s (ID,SALT,MASTER_KEY,CIPHER,VIS,VALIDATE) VALUES (?,?,?,?,?,?)";
-        data = (void *[6]) { name, salt, master_key, PM_INST->ciphertext, 1, validate };
+        data = (void *[6]) { name, salt, master_key, pm_monolith->ciphertext, 1, validate };
         data_sz = (int [6]) { 0, 0, M_KEYSIZE, CIPHERSIZE, 0, 0 };
         data_tp = (int [6]) { PMSQL_TEXT, PMSQL_TEXT, PMSQL_BLOB, PMSQL_BLOB,
             PMSQL_INT, PMSQL_INT };
     } else {
         rquery = "INSERT INTO %s (ID,SALT,CIPHER,VIS,VALIDATE) VALUES (?,?,?,?,?)";
-        data = (void *[5]) { name, salt, PM_INST->ciphertext, 1, validate };
+        data = (void *[5]) { name, salt, pm_monolith->ciphertext, 1, validate };
         data_sz = (int [5]) { 0, 0, CIPHERSIZE, 0, 0 };
         data_tp = (int [5]) { PMSQL_TEXT, PMSQL_TEXT, PMSQL_BLOB, PMSQL_INT, PMSQL_INT};
     }
 
-    size_t query_len = strlen(rquery) + strlen(PM_INST->table_name);
+    size_t query_len = strlen(rquery) + strlen(pm_monolith->table_name);
     char * query = malloc(query_len+1);
-    snprintf(query, query_len, rquery, PM_INST->table_name);
+    snprintf(query, query_len, rquery, pm_monolith->table_name);
 
     sqlite3_stmt * stmt;
-    pmsql_stmt pmsql = { SQLITE_STATIC, PM_INST->db, stmt, NULL };
+    pmsql_stmt pmsql = { SQLITE_STATIC, pm_monolith->db, stmt, NULL };
     int ecode = pmsql_compile( &pmsql, query, 5+ukey, data, data_sz, data_tp );
     if ( ecode < 0 ) {
         printf("Set: pmsql error during binding (SQLITE : %i ) : %s\n", (-1 * ecode ) ,
             pmsql.pmsql_error );
         return;
     } else if ( ecode > 0 ) {
-        printf("Set: sql error %i during binding: %s\n", ecode, sqlite3_errmsg(PM_INST->db) );
+        printf("Set: sql error %i during binding: %s\n", ecode, sqlite3_errmsg(pm_monolith->db) );
         return;
     }
 
     int eval = sqlite3_step(pmsql.stmt); //Execute the statement
     if ( eval != SQLITE_DONE ) {
-        printf("Set: SQL query evaluation error %i: %s\n", eval, sqlite3_errmsg(PM_INST->db));
+        printf("Set: SQL query evaluation error %i: %s\n", eval, sqlite3_errmsg(pm_monolith->db));
         return;
     }
     sqlite3_finalize(pmsql.stmt);
@@ -248,13 +269,13 @@ void set(pm_inst * PM_INST, char * name) {
         // memset(context, 0, DATASIZE);
 }
 
-void get(pm_inst * PM_INST, char * name) {
+void get(pm_inst * pm_monolith, char * name) {
     // Check for exists / in trash
     int name_len = strlen(name);
-    int exists = _entry_in_table(PM_INST, PM_INST->table_name, name);
+    int exists = _entry_in_table(pm_monolith, pm_monolith->table_name, name);
     if ( exists == 0 ) {
         printf("Get: No entry %s exists in %s. Perhaps look elsewhere? [pm help]"
-        " for help on searching.\n", name, PM_INST->table_name);
+        " for help on searching.\n", name, pm_monolith->table_name);
         return;
     } else if ( exists == 1 ) {
         printf("Get: %s is in the trash. [pm rec %s] to recover so the entry may be retreived\n", name, name);
@@ -271,9 +292,9 @@ void get(pm_inst * PM_INST, char * name) {
 
     // query to index to get meta / val data for this entry
     rquery = "SELECT UKEY, SALT, MASTER_KEY FROM _index WHERE ID = ?";
-    data = ( void * [1] ) {PM_INST->table_name};
+    data = ( void * [1] ) {pm_monolith->table_name};
     data_tp = ( int [1] ) { PMSQL_TEXT };
-    pmsql = &(pmsql_stmt) { SQLITE_STATIC, PM_INST->db, stmt, NULL };
+    pmsql = &(pmsql_stmt) { SQLITE_STATIC, pm_monolith->db, stmt, NULL };
 
     if (( ecode = pmsql_compile( pmsql, rquery, 1, data, NULL, data_tp ) )) {
         goto get_sql_fail;
@@ -304,9 +325,9 @@ void get(pm_inst * PM_INST, char * name) {
 
     data_tp = ( int[1] ) { PMSQL_TEXT };
     data = ( char * [1] ) { name };
-    size_t query_len = strlen(rquery) + strlen(PM_INST->table_name);
+    size_t query_len = strlen(rquery) + strlen(pm_monolith->table_name);
     char * query = malloc(query_len+1);
-    snprintf(query, query_len, rquery, PM_INST->table_name);
+    snprintf(query, query_len, rquery, pm_monolith->table_name);
 
     if (( ecode = pmsql_compile( pmsql, query, 1, data, NULL, data_tp ) ))
         goto get_sql_fail;
@@ -318,11 +339,11 @@ void get(pm_inst * PM_INST, char * name) {
 
     if ( ukey ) {
         data_tp = ( int[4] ) { PMSQL_BLOB, PMSQL_BLOB, PMSQL_BLOB, PMSQL_INT };
-        data = ( void * [4] ) { PM_INST->master_key, PM_INST->master_key+SALTSIZE,
-            PM_INST->ciphertext, &entry_val };
+        data = ( void * [4] ) { pm_monolith->master_key, pm_monolith->master_key+SALTSIZE,
+            pm_monolith->ciphertext, &entry_val };
         data_sz = ( int[4] ) {SALTSIZE, M_KEYSIZE, CIPHERSIZE, 0};
     } else {
-        data = ( void * [3] ) { PM_INST->master_key, PM_INST->ciphertext, &entry_val };
+        data = ( void * [3] ) { pm_monolith->master_key, pm_monolith->ciphertext, &entry_val };
         data_sz = ( int[3] ) { SALTSIZE, CIPHERSIZE, 0};
         data_tp = ( int[3] ) { PMSQL_BLOB, PMSQL_BLOB, PMSQL_INT };
     }
@@ -343,28 +364,28 @@ void get(pm_inst * PM_INST, char * name) {
         goto get_cleanup;
     }
 
-    memcpy( PM_INST->plaintext, pswd, DATASIZE);
+    memcpy( pm_monolith->plaintext, pswd, DATASIZE);
     memset(pswd, 0, pswd_len);
 
     if ( entry_val && !ukey ) {
         // if comkey, check against masterkey from _index query, then turn off val
         // so dec doesnt try to val with wrong salt
-        if ( strcmp(i_mkey, crypt(PM_INST->plaintext, i_salt) ) ) {
+        if ( strcmp(i_mkey, crypt(pm_monolith->plaintext, i_salt) ) ) {
             printf("Get: Wrong password for vault %s. Use -u to make an arbitrary key entry\n",
-                PM_INST->table_name);
+                pm_monolith->table_name);
             return;
         }
         // turn off val
-        PM_INST->pm_opts |= SKIPVAL;
+        pm_monolith->pm_opts |= SKIPVAL;
     } else {
-        PM_INST->pm_opts |= SKIPVAL; //Add flag at 2^1 bit (don't validate result)
-        if ( PM_INST->pm_opts & WARNNOVAL ) { // if warn
+        pm_monolith->pm_opts |= SKIPVAL; //Add flag at 2^1 bit (don't validate result)
+        if ( pm_monolith->pm_opts & WARNNOVAL ) { // if warn
             printf("Warning: decryption validation disabled. PM will be unable to verify\
                 the output for %s\nTo stop seeing this warning: [ pm setattr warn 0 ]\n", name );
         }
     }
 
-    int res = dec_ciphertext(PM_INST);
+    int res = dec_ciphertext(pm_monolith);
     if ( res == -1 ) {
         printf("Invalid passphrase\n");
         return;
@@ -372,35 +393,35 @@ void get(pm_inst * PM_INST, char * name) {
         return; //error in dec
     }
 
-    printf("Retreived: %s:%s : %s\n", PM_INST->table_name, name, PM_INST->plaintext);
+    printf("Retreived: %s:%s : %s\n", pm_monolith->table_name, name, pm_monolith->plaintext);
     get_cleanup:
-        memset(PM_INST, 0, sizeof(pm_inst));
+        memset(pm_monolith, 0, sizeof(pm_inst));
         return;
     get_sql_fail:
         if ( ecode < 0 )
             printf("Get: pmsql error during binding : %s\n", pmsql->pmsql_error );
         else if ( ecode > 0 )
-            printf("Get: sql error during binding: %s\n", sqlite3_errmsg(PM_INST->db) );
+            printf("Get: sql error during binding: %s\n", sqlite3_errmsg(pm_monolith->db) );
         return;
 }
 
-void forget(pm_inst * PM_INST, char * name) {
-    char * table = (PM_INST->pm_opts & OVAULT) ? "_index" : PM_INST->table_name ;
-    _recover_or_forget(PM_INST, table, name, 0);
+void forget(pm_inst * pm_monolith, char * name) {
+    char * table = (pm_monolith->pm_opts & OVAULT) ? "_index" : pm_monolith->table_name ;
+    _recover_or_forget(pm_monolith, table, name, 0);
 }
 
-void recover(pm_inst * PM_INST, char * name) {
-    char * table = (PM_INST->pm_opts & OVAULT) ? "_index" : PM_INST->table_name ;
-    //printf("%i : %s\n", (PM_INST->pm_opts & 8), table  );
-    _recover_or_forget(PM_INST, table, name, 1);
+void recover(pm_inst * pm_monolith, char * name) {
+    char * table = (pm_monolith->pm_opts & OVAULT) ? "_index" : pm_monolith->table_name ;
+    //printf("%i : %s\n", (pm_monolith->pm_opts & 8), table  );
+    _recover_or_forget(pm_monolith, table, name, 1);
 }
 
-void delete(pm_inst * PM_INST, char * name) {
+void delete(pm_inst * pm_monolith, char * name) {
     int name_len = strlen(name);
-    char vault = (PM_INST->pm_opts & OVAULT);// >> 3;
-    char * table = vault ? "_index" : PM_INST->table_name ;
+    char vault = (pm_monolith->pm_opts & OVAULT);// >> 3;
+    char * table = vault ? "_index" : pm_monolith->table_name ;
 
-    if ( ! _entry_in_table(PM_INST, table, name) ) {
+    if ( ! _entry_in_table(pm_monolith, table, name) ) {
         printf("Del: no entry to delete\n");
     }
     printf("This will permanently delete %s. This action cannot be undone."
@@ -413,12 +434,12 @@ void delete(pm_inst * PM_INST, char * name) {
     }
 
     if ( vault )
-        _delete_val(PM_INST, name);
+        _delete_val(pm_monolith, name);
     else
-        _delete(PM_INST, name);
+        _delete(pm_monolith, name);
 }
 
-void mkvault(pm_inst * PM_INST, char * name) {
+void mkvault(pm_inst * pm_monolith, char * name) {
     // shouldn't happen, should be caught in cli_main.
     if ( !name || strlen(name) == 0 ) { // short circut ?
         printf("Mkvault: name required. [ pm mkvault NAME ]\n");
@@ -429,20 +450,20 @@ void mkvault(pm_inst * PM_INST, char * name) {
             return;
     } // these need to be up here so error handling doesnt try to finalize nonexistant
     sqlite3_stmt * stmt;
-    pmsql_stmt pmsql = { SQLITE_STATIC, PM_INST->db, stmt, 0 };
+    pmsql_stmt pmsql = { SQLITE_STATIC, pm_monolith->db, stmt, 0 };
 
-    int exists = _entry_in_table(PM_INST, "_index", name);
+    int exists = _entry_in_table(pm_monolith, "_index", name);
     if ( exists == 2 ) {
-        printf("%s already exists. [ pm rmvault %s to remove ]\n", name, PM_INST->table_name);
+        printf("%s already exists. [ pm rmvault %s to remove ]\n", name, pm_monolith->table_name);
         return;
     } else if ( exists == 1 ) {
-        if ( _delete_val(PM_INST, name) )
+        if ( _delete_val(pm_monolith, name) )
             goto mkv_sql_fail;
     } else if ( exists != 0  ) { // error in _e_i_v
         printf("mkvault: error in e_i_v\n" );
         return;
     }
-    char ukey = (PM_INST->pm_opts & UKEY);// >>2;
+    char ukey = (pm_monolith->pm_opts & UKEY);// >>2;
     char * bquery;
     if (ukey) {
         bquery = "CREATE TABLE %s (ID CHAR(32) PRIMARY KEY, SALT CHAR(9) NOT NULL, "\
@@ -458,7 +479,7 @@ void mkvault(pm_inst * PM_INST, char * name) {
     char * query = malloc( buffsz );
     snprintf(query, buffsz, bquery, name);
 
-    int ecode = sqlite3_prepare_v2(PM_INST->db, query, strlen(query), &stmt, NULL);
+    int ecode = sqlite3_prepare_v2(pm_monolith->db, query, strlen(query), &stmt, NULL);
     free(query);
     if ( ecode != SQLITE_OK )
         goto mkv_sql_fail;
@@ -481,37 +502,40 @@ void mkvault(pm_inst * PM_INST, char * name) {
     return;
 
     mkv_sql_fail:
-        printf("Mkvault: SQL Error: %s\n", sqlite3_errmsg(PM_INST->db) );
+        printf("Mkvault: SQL Error: %s\n", sqlite3_errmsg(pm_monolith->db) );
         sqlite3_finalize(pmsql.stmt);
 }
 
-void ls(pm_inst * PM_INST, char * name) {
-    _ls_find(PM_INST, name);// >> 3 ) ;
+void ls(pm_inst * pm_monolith, char * name) {
+    _ls_find(pm_monolith, name);// >> 3 ) ;
 }
 
-void check(pm_inst * PM_INST, char * name) {
+void check(pm_inst * pm_monolith, char * name) {
     printf("Check does nothing right now\n");
     return;
     // char * bquery = "SELECT UKEY from _index WHERE ID = ?";
-
 }
 
 // only takes these args for ease of calling. ignores them (nesecary?) 
-void help(pm_inst * PM_INST, char * name) {
+void help(pm_inst * pm_monolith, char * name) {
     printf("In production, this is a help page.\n");
 }
 
-void conf(pm_inst * PM_INST, char * name){
-    printf("%s\n", PM_INST->conf_path);
+void conf(pm_inst * pm_monolith, char * name){
+    printf("%s\n", pm_monolith->conf_path);
 }
 
-void _ls_find(pm_inst * PM_INST, char * name) {
+//void chpass( pm_inst * pm_monolith, char * name ) { 
+//
+//}
+
+void _ls_find(pm_inst * pm_monolith, char * name) {
     // printf("ls_find(%s, %i)\n", name, vault );
-    char vault = PM_INST->pm_opts & OVAULT;
-    char * table = PM_INST->table_name;
-    if ( vault && ! _entry_in_table(PM_INST, "_index", PM_INST->table_name) ) {
+    char vault = pm_monolith->pm_opts & OVAULT;
+    char * table = pm_monolith->table_name;
+    if ( vault && ! _entry_in_table(pm_monolith, "_index", pm_monolith->table_name) ) {
         if ( strcmp(table,"_index")) {
-            name = PM_INST->table_name;
+            name = pm_monolith->table_name;
             table = "_index";
         }
         //
@@ -524,11 +548,11 @@ void _ls_find(pm_inst * PM_INST, char * name) {
     goto _ls_printall;
 
     _ls_swithin:
-    if ( _entry_in_table( PM_INST, table, name ) ) {
+    if ( _entry_in_table( pm_monolith, table, name ) ) {
         printf("%s:%s found.\n", table, name );
     }
 
-    char * * sims = _find_by_key(PM_INST, table, name, 8);
+    char * * sims = _find_by_key(pm_monolith, table, name, 8);
 
     if (!sims ) {
         printf("%s:%s not found. No similer entries were found either.\n",
@@ -545,7 +569,7 @@ void _ls_find(pm_inst * PM_INST, char * name) {
     return;
 
     _ls_printall:;
-    char * * all = _all_in_table(PM_INST, table );
+    char * * all = _all_in_table(pm_monolith, table );
     if (!all ) {
         return;
     }
@@ -568,14 +592,14 @@ void _ls_find(pm_inst * PM_INST, char * name) {
     }
 }
 
-int _entry_in_table(pm_inst * PM_INST, char * tb_name, char * ent_name) {
+int _entry_in_table(pm_inst * pm_monolith, char * tb_name, char * ent_name) {
     char * rquery = "SELECT VIS FROM %s WHERE ID = ?";
     size_t query_len = strlen(rquery) + strlen(tb_name);
     char * query = malloc(query_len+1);
     snprintf(query, query_len, rquery, tb_name);
     sqlite3_stmt * statement;
 
-    int ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &statement, NULL);
+    int ecode = sqlite3_prepare_v2(pm_monolith->db, query, query_len, &statement, NULL);
     free(query);
     if ( ecode != SQLITE_OK )
         goto eit_sql_fail;
@@ -597,19 +621,19 @@ int _entry_in_table(pm_inst * PM_INST, char * tb_name, char * ent_name) {
     return ecode + 1;
 
     eit_sql_fail:
-        printf("Entry in Vault: SQL Error: %s\n", sqlite3_errmsg(PM_INST->db) );
+        printf("Entry in Vault: SQL Error: %s\n", sqlite3_errmsg(pm_monolith->db) );
         sqlite3_finalize(statement);
         return -1;
 }
 
-int _recover_or_forget(pm_inst * PM_INST, char * table, char * name, int op ){
+int _recover_or_forget(pm_inst * pm_monolith, char * table, char * name, int op ){
     char * opstrings[] = { "Forget", "Recover" };
     if (name == NULL){
         printf("%s: a name is required.\n", opstrings[op]);
         return -1;
     }
     int name_len = strlen(name);
-    int exists = _entry_in_table(PM_INST, table, name);
+    int exists = _entry_in_table(pm_monolith, table, name);
     if ( exists == -1 )
         return -1;
     else if ( exists == 0 ) {
@@ -625,7 +649,7 @@ int _recover_or_forget(pm_inst * PM_INST, char * table, char * name, int op ){
     snprintf(query, query_len, rquery, table);
 
     sqlite3_stmt * statement;
-    int ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &statement, NULL);
+    int ecode = sqlite3_prepare_v2(pm_monolith->db, query, query_len, &statement, NULL);
     free(query);
     if ( ecode != SQLITE_OK )
         goto roc_sql_fail;
@@ -645,28 +669,28 @@ int _recover_or_forget(pm_inst * PM_INST, char * table, char * name, int op ){
     sqlite3_finalize(statement);
     return 0;
     roc_sql_fail:
-        printf("%s: SQL Error: %s\n", opstrings[op], sqlite3_errmsg(PM_INST->db) );
+        printf("%s: SQL Error: %s\n", opstrings[op], sqlite3_errmsg(pm_monolith->db) );
         sqlite3_finalize(statement);
         return -1;
 }
 
-int _delete(pm_inst * PM_INST, char * name) {
+int _delete(pm_inst * pm_monolith, char * name) {
     char * rquery = "DELETE FROM %s WHERE ID = ?";
-    size_t query_len = strlen(rquery) + strlen(PM_INST->table_name);
+    size_t query_len = strlen(rquery) + strlen(pm_monolith->table_name);
     char * query = malloc(query_len+1);
-    snprintf(query, query_len, rquery, PM_INST->table_name);
+    snprintf(query, query_len, rquery, pm_monolith->table_name);
 
     sqlite3_stmt * statement;
-    int ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &statement, NULL);
+    int ecode = sqlite3_prepare_v2(pm_monolith->db, query, query_len, &statement, NULL);
     free(query);
     if ( ecode != SQLITE_OK ) {
-        printf("Del: Error compiling SQL query: %s\n", sqlite3_errmsg(PM_INST->db) );
+        printf("Del: Error compiling SQL query: %s\n", sqlite3_errmsg(pm_monolith->db) );
         return -1;
     }
 
     ecode = sqlite3_bind_text(statement, 1, name, strlen(name), SQLITE_STATIC);
     if ( ecode != SQLITE_OK ) {
-        printf("Del: Error binding SQL query: %s\n", sqlite3_errmsg(PM_INST->db) );
+        printf("Del: Error binding SQL query: %s\n", sqlite3_errmsg(pm_monolith->db) );
         return -1;
     }
 
@@ -677,20 +701,20 @@ int _delete(pm_inst * PM_INST, char * name) {
     }
 
     printf("Del: a backend error prevented the deletion of %s : %s\n", name,
-        sqlite3_errmsg(PM_INST->db) );
+        sqlite3_errmsg(pm_monolith->db) );
     return -1;
 }
 
-int _delete_val( pm_inst * PM_INST, char * name ) {
+int _delete_val( pm_inst * pm_monolith, char * name ) {
     char * rquery = "DROP TABLE %s";
     size_t query_len = strlen(rquery) + strlen(name);
     char * query = malloc(query_len+1);
     snprintf(query, query_len, rquery, name);
 
     sqlite3_stmt * stmt;
-    pmsql_stmt pmsql = { SQLITE_STATIC, PM_INST->db, stmt, 0 };
+    pmsql_stmt pmsql = { SQLITE_STATIC, pm_monolith->db, stmt, 0 };
 
-    int ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &stmt, NULL);
+    int ecode = sqlite3_prepare_v2(pm_monolith->db, query, query_len, &stmt, NULL);
     free(query);
     if ( ecode )
         goto del_val_sql_fail;
@@ -713,14 +737,14 @@ int _delete_val( pm_inst * PM_INST, char * name ) {
     return 0;
 
     del_val_sql_fail:
-        printf("Backend error prevented vault deletion: SQL Error: %s\n", sqlite3_errmsg(PM_INST->db) );
+        printf("Backend error prevented vault deletion: SQL Error: %s\n", sqlite3_errmsg(pm_monolith->db) );
         sqlite3_finalize(pmsql.stmt);
         return -1;
 }
 
 char * FBK_KEY; // No way to get around glob unfortuantely
-char * * _find_by_key( pm_inst * PM_INST, char * tb, char * key, int numres ) {
-    char * * all = _all_in_table( PM_INST, tb );
+char * * _find_by_key( pm_inst * pm_monolith, char * tb, char * key, int numres ) {
+    char * * all = _all_in_table( pm_monolith, tb );
 
     if ( !all )
         return NULL;
@@ -761,7 +785,7 @@ int _fbk_compare( const void * a, const void * b) {
         return 0;
 }
 
-char * * _all_in_table( pm_inst * PM_INST, char * tb_name ) {
+char * * _all_in_table( pm_inst * pm_monolith, char * tb_name ) {
     // printf("all_in_table(%s)\n",tb_name );
     char * bquery = "SELECT COUNT(*) FROM %s";
     size_t query_len = strlen(bquery) + strlen(tb_name);
@@ -769,7 +793,7 @@ char * * _all_in_table( pm_inst * PM_INST, char * tb_name ) {
     snprintf(query, query_len, bquery, tb_name);
 
     sqlite3_stmt * stmt;
-    int ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &stmt, NULL);
+    int ecode = sqlite3_prepare_v2(pm_monolith->db, query, query_len, &stmt, NULL);
     free(query);
 
     if ( ecode != SQLITE_OK )
@@ -786,7 +810,7 @@ char * * _all_in_table( pm_inst * PM_INST, char * tb_name ) {
     //     goto ait_sql_fail;
     sqlite3_finalize(stmt);
 
-    char * * ids = malloc(rows * sizeof(char *) + 2 );
+    char * * ids = malloc(( rows+2 ) * sizeof(char *) );
     char * vis = malloc(rows);
     ids[0] = vis;
 
@@ -795,7 +819,7 @@ char * * _all_in_table( pm_inst * PM_INST, char * tb_name ) {
     query = malloc(query_len + 1);
     snprintf(query, query_len, bquery, tb_name);
 
-    if (( ecode = sqlite3_prepare_v2(PM_INST->db, query, query_len, &stmt, NULL) ))
+    if (( ecode = sqlite3_prepare_v2(pm_monolith->db, query, query_len, &stmt, NULL) ))
         goto ait_sql_fail;
 
     ecode = sqlite3_step(stmt);
@@ -815,6 +839,6 @@ char * * _all_in_table( pm_inst * PM_INST, char * tb_name ) {
     return ids;
 
     ait_sql_fail:
-        printf("all_in_table SQL error: %i : %s\n", ecode, sqlite3_errmsg(PM_INST->db)  );
+        printf("all_in_table SQL error: %i : %s\n", ecode, sqlite3_errmsg(pm_monolith->db)  );
         return NULL;
 }

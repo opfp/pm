@@ -42,7 +42,7 @@ typedef struct {
     uint8_t derived_key[I_KEYSIZE];
     uint8_t plaintext[DATASIZE];
     uint8_t ciphertext[CIPHERSIZE];// (64 + 32 = 96)
-    int guardian_pid;
+    //int guardian_pid;
     int cooldown;
     char pm_opts; // see idocs for explanation
     char * conf_path; 
