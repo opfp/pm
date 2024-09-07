@@ -1,12 +1,13 @@
 #!/bin/bash
 
-if [ ! -e .version ]; then 
+BASE=/Users/owen/cs/dev/pm/
+CONF=$BASE/pmd_rsc/pmd.conf
+
+if [ ! -e $BASE"/.version" ]; then 
     echo "No pm version set. echo [VERSION] > .version to rectify" 
     exit 1 
 fi 
 
-BASE=/Users/owen/cs/dev/pm
-CONF=$BASE/pmd_rsc/pmd.conf
-TARG=pm$(cat ".version")
+TARG=pm$(cat $BASE"/.version")
 
 $BASE/bins/$TARG $CONF $*

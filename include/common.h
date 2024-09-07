@@ -19,9 +19,15 @@
 #define SKIPVAL 2
 #define UKEY 4
 #define OVAULT 8
-#define CONFIRM 16
+//#define CONFIRM 16
+#define NOCONFIRM 16
 #define WARNNOVAL 32
 #define DEFVAULT 64
+
+// application return values 
+/* These are "good" errors that are defined behavior, occuring when the user does 
+	 something wrong or invalid */  
+enum ISSUE_RETS { PW_WRONG=1, WRONG_KEYTYPE, SYNTAX, ILLEGAL_IN, OVERWRITE, DNE }; 
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -40,6 +46,7 @@ typedef struct {
     char table_name[16];
     uint8_t master_key[hydro_pwhash_MASTERKEYBYTES]; // 32
     uint8_t derived_key[I_KEYSIZE];
+		//uint8_t passtext[DATASIZE]; 
     uint8_t plaintext[DATASIZE];
     uint8_t ciphertext[CIPHERSIZE];// (64 + 32 = 96)
     //int guardian_pid;
@@ -48,8 +55,8 @@ typedef struct {
     char * conf_path; 
 } pm_inst;
 
-#include "cli.h"
-#include "pm.h"
-#include "enc.h"
+//#include "cli.h"
+//#include "pm.h"
+//#include "enc.h"
 
 #endif
