@@ -39,5 +39,6 @@ $(DB_ODIR)/%.o: $(SDIR)/%.c $(LDIR)/%.h
 # Clean target to remove object files
 clean:
 	rm -fv $(ODIR)/*.o
-	rm -fv $(ODIR)/*.dSYM 
+	rm -fv $(DB_ODIR)/*.o
+#	rm -fv $(ODIR)/*.dSYM 
 	

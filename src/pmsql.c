@@ -1,7 +1,8 @@
 #include "pmsql.h"
 
+/* accepts BLOB, INT and TEXT (not INT_WB) */ 
 int pmsql_compile(pmsql_stmt * base_stmt, char * query, int num_binds,
-    void * * bind_data, int * blob_lens, int * bind_types ) {
+    pmsql_data_t * bind_data, int * blob_lens, int * bind_types ) {
     char * error;
     if ( !base_stmt )
         return -1;
@@ -42,13 +43,13 @@ int pmsql_compile(pmsql_stmt * base_stmt, char * query, int num_binds,
     int * bind_res = malloc( num_binds * sizeof(int) );
     for ( int i = 0; i < num_binds; i++ ) {
         if ( bind_types[i] == PMSQL_BLOB ) {
-            bind_res[i] = sqlite3_bind_blob(base_stmt->stmt, i+1, bind_data[i],
+            bind_res[i] = sqlite3_bind_blob(base_stmt->stmt, i+1, bind_data[i].blob,
                 blob_lens[i], base_stmt->dest);
         } else if ( bind_types[i] == PMSQL_TEXT ) {
-            bind_res[i] = sqlite3_bind_text(base_stmt->stmt, i+1,(char *) bind_data[i],
-                strlen(bind_data[i]), base_stmt->dest);
+            bind_res[i] = sqlite3_bind_text(base_stmt->stmt, i+1, bind_data[i].text,
+                strlen(bind_data[i].text), base_stmt->dest);
         } else if ( bind_types[i] == PMSQL_INT ) {
-            bind_res[i] = sqlite3_bind_int(base_stmt->stmt, i+1, (int) bind_data[i] );
+            bind_res[i] = sqlite3_bind_int(base_stmt->stmt, i+1, bind_data[i].integer );
         } else {
             error = "Invalid PMSQL_TYPE.";
             goto pmsql_compile_reterr;
@@ -73,7 +74,8 @@ int pmsql_compile(pmsql_stmt * base_stmt, char * query, int num_binds,
         return ret;
 }
 
-int pmsql_read(pmsql_stmt * base_stmt, int num_rows, void * * buffs,
+/* accepts BLOB, INT_WB and TEXT (not INT) */ 
+int pmsql_read(pmsql_stmt * base_stmt, int num_rows, pmsql_data_t * buffs,
     int * buff_lens, int * bind_types ) {
     int ret = -1;
     char * error;
@@ -88,7 +90,7 @@ int pmsql_read(pmsql_stmt * base_stmt, int num_rows, void * * buffs,
     memcpy(buff_lens_cpy, buff_lens, num_rows * sizeof(int));
     // Check sizes
     for ( int i = 0; i < num_rows; i++ ) {
-        if ( bind_types[i] == PMSQL_INT )
+        if ( bind_types[i] == PMSQL_INT_WB )
             continue;
         int retsz = sqlite3_column_bytes(base_stmt->stmt, i);
         if ( buff_lens_cpy[i] < 0) {
@@ -110,11 +112,11 @@ int pmsql_read(pmsql_stmt * base_stmt, int num_rows, void * * buffs,
         if ( buff_lens_cpy[i] < 0 )
             continue;
         if ( bind_types[i] == PMSQL_BLOB ) {
-            memcpy( buffs[i], sqlite3_column_blob(base_stmt->stmt, i), buff_lens_cpy[i] );
+            memcpy( buffs[i].blob, sqlite3_column_blob(base_stmt->stmt, i), buff_lens_cpy[i] );
         } else if ( bind_types[i] == PMSQL_TEXT ) {
-            memcpy( buffs[i], sqlite3_column_text(base_stmt->stmt, i), buff_lens_cpy[i] );
-        } else if ( bind_types[i] == PMSQL_INT ) {
-            *((int *) buffs[i]) = sqlite3_column_int(base_stmt->stmt, i);
+            memcpy( buffs[i].text, sqlite3_column_text(base_stmt->stmt, i), buff_lens_cpy[i] );
+        } else if ( bind_types[i] == PMSQL_INT_WB ) {
+            *(buffs[i].int_wb) = sqlite3_column_int(base_stmt->stmt, i);
         } else {
             error = "Invalid PMSQL_TYPE.";
             goto pmsql_read_reterr;

@@ -1,9 +1,9 @@
 #include "pm.h"
 #include "cli.h" 
 
-const char * pm_flags[NUM_FLAGS] = { "unique-key", "skip-validate", "no-confirm" };  
+const char * pm_flags[NUM_FLAGS] = {"unique-key", "skip-validate", "no-confirm","pretty-out"};  
 
-int flag_bit[NUM_FLAGS] = { UKEY, SKIPVAL, NOCONFIRM }; 
+int flag_bit[NUM_FLAGS] = { UKEY, SKIPVAL, NOCONFIRM, PRETTYOUT }; 
 
 int val_pad(char * in) {
 	char pad = 0;

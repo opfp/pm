@@ -30,7 +30,7 @@ int enc_plaintext( pm_inst * pm_monolith, char * pswd ) {
 		goto enc_cleanup;
 	}
 
-	void * * data = ( void * [1] ) { pm_monolith->table_name };
+	pmsql_data_t * data = ( pmsql_data_t [1] ) { {.text=pm_monolith->table_name} };
 	int * data_tp = ( int [1] ) { PMSQL_TEXT };
 	char * query = "SELECT UKEY, SALT, MASTER_KEY FROM _index WHERE ID = ?";
 
@@ -44,9 +44,9 @@ int enc_plaintext( pm_inst * pm_monolith, char * pswd ) {
 	int ukey;
 	char i_salt[SALTSIZE];
 	char i_mkey[M_KEYSIZE];
-	data = ( void * [3] ) { &ukey, i_salt, i_mkey };
+	data = ( pmsql_data_t [3] ) { {.int_wb=&ukey}, {.blob=i_salt}, {.blob=i_mkey} };
 	int * data_sz = ( int [3] ) { 0, ( -1 * SALTSIZE ), ( -1 * M_KEYSIZE ) };
-	data_tp = ( int [3] ) { PMSQL_INT, PMSQL_BLOB, PMSQL_BLOB };
+	data_tp = ( int [3] ) { PMSQL_INT_WB, PMSQL_BLOB, PMSQL_BLOB };
 
 	if (( ecode = pmsql_read(&pmsql, 3, data, data_sz, data_tp) ))
 		goto enc_sql_fail;
@@ -89,7 +89,7 @@ int enc_plaintext( pm_inst * pm_monolith, char * pswd ) {
 
 	if ( first_commkey ) {
 		query = "UPDATE _index SET (UKEY, SALT, MASTER_KEY) = (0,?,?) WHERE ID = ?";
-		data = ( void * [3] ) { salt, m_key, pm_monolith->table_name };
+		data = ( pmsql_data_t [3] ) { {.blob=salt}, {.blob=m_key}, {.text=pm_monolith->table_name} };
 		data_tp = ( int [3] ) { PMSQL_BLOB, PMSQL_BLOB, PMSQL_TEXT };
 		data_sz = ( int[3] ) { SALTSIZE, M_KEYSIZE, 0};
 

@@ -16,117 +16,6 @@ int _apply_kwargs( int, char **, char * * kw_vals, pm_inst * );
 int _apply_flags ( int, char **, pm_inst * );  
 
 char * keywords[KW_NUM] = { "vault", "ctext", "pword", "name" }; 
-/*
-#define NUM_FLAGS 3 
-char * flags[NUM_FLAGS] = { "unique-key", "skip-validate", "no-confirm" };  
-int flag_bit[NUM_FLAGS] = { UKEY, SKIPVAL, NOCONFIRM }; 
-*/
-// void cli_main( int argc, char * * argv, pm_inst * pm_monolith) {
-	// 	if ( argc < 1 ) {
-	// 		printf("pm: Not enough arguments. [pm help] for help, or read the docs.\n");
-	// 		//help(void, void);
-	// 		return;
-	// 	}
-	// 	#ifndef NUM_VERBS
-	// 	#define NUM_VERBS 10 
-	// 	#endif 
-	// 	char * verbs[NUM_VERBS] = { "set", "get", "mkv", "forg", "rec", "del",
-	// 		"check", "ls", "help", "conf" };
-	// 	// See idocs for explanation of verb_type
-	// 
-	// 	//						   set, get, mkv, forg, rec, del, chk, ls, help, conf
-	// 	char verb_type[NUM_VERBS] = { 0 , 0  , 1  , 0   , 0  , 0  , 0  , 2 , 0, 0};
-	// 	void (*functions[])(pm_inst *, char *) = { set, get, mkvault, forget, recover,
-	// 		delete, check, ls, help, conf };
-	// 
-	// 	int i = 0;
-	// 	while ( i < NUM_VERBS ) {
-	// 		if ( !strcmp(argv[0], verbs[i]) )
-	// 			break;
-	// 		 ++i;
-	// 	}
-	// 	if ( i == NUM_VERBS ) {
-	// 		printf("verb %s unknown\n", argv[0] );
-	// 		help(NULL, NULL);
-	// 		return;
-	// 	}
-	// 
-	// 	char vault_skipval = 0;
-	// 	char * vault = NULL;
-	// 	char * name = NULL;
-	// 	if ( verb_type[i] == 0 ) {
-	// 		if ( argc < 2 ) {
-	// 			printf("%s: Name required. [pm help].\n", verbs[i] );
-	// 			return;
-	// 		}
-	// 		name = ( argc > 2 ) ? argv[2] : argv[1];
-	// 		vault = ( argc > 2 ) ? argv[1] : NULL;
-	// 	} else if ( verb_type[i] == 1 ) {
-	// 		if ( argc < 2 ) {
-	// 			printf("%s: Name required. [pm help].\n", verbs[i] );
-	// 			return;
-	// 		}
-	// 		name = argv[1];
-	// 	} else if ( verb_type[i] == 2 ) {
-	// 		if ( argc > 1 ) {
-	// 			if ( pm_monolith->pm_opts & OVAULT ) {
-	// 				vault = argv[1];
-	// 				name = ( argc > 2 ) ? argv[2] : NULL;
-	// 			} else {
-	// 				vault = ( argc > 2 ) ? argv[1] : NULL;
-	// 				name = ( argc > 2 ) ? argv[2] : argv[1];
-	// 			}
-	// 		} else if ( pm_monolith->pm_opts & OVAULT ) {
-	// 			vault = "_index";
-	// 			vault_skipval = 1;
-	// 		}
-	// 	}
-	// 	// } else if ( verb_type[i] == 3 ) {
-	// 	//	 if ( argc < 2 ) {
-	// 	//		 printf("%s: Vault name required. [pm help].\n", verbs[i] );
-	// 	//		 return;
-	// 	//	 }
-	// 	//	 vault = argv[1];
-	// 	//	 name = ( argc > 2 ) ? argv[2] : NULL;
-	// 	// }
-	// 	// --- testing ---
-	// 	// char * option_names[] = { "Echo", "Skip pswd hash val", "Use ukey vault",
-	// 	//	 "vault" , "Confirm cipertexts" , "Warn on no validation" , "Use only default vaults"};
-	// 	// unsigned char opts = pm_monolith->pm_opts;
-	// 	// for ( int i = 0; i < 7; i++) {
-	// 	//	 printf("%i : %s\n", ( opts & 1 ), option_names[i]);
-	// 	//	 opts = opts >> 1;
-	// 	// }
-	// 	// ---
-	// 	if (vault && !vault_skipval) {
-	// 		if ( !pmsql_safe_in(vault) || strlen(vault) > 15 ) {
-	// 			printf("Illegal vault name: %s\n", vault);
-	// 			return;
-	// 		}
-	// 		if ( pm_monolith->pm_opts & DEFVAULT ) {
-	// 			printf("Vault specified, but pm configured to only use defaults."
-	// 				" [ pm chattr def_vaults 0 ] to enable user created vaults.\n");
-	// 			return;
-	// 		}
-	// 		if ( !_entry_in_table(pm_monolith, "_index", argv[1]) && !verb_type[i] ) {
-	// 			printf("No vault named %s. [pm mkvault] to make a vault.\n", argv[1]);
-	// 			return;
-	// 		}
-	// 	} else if ( !vault_skipval ) {
-	// 		vault = ( pm_monolith->pm_opts & UKEY ) ? "_main_ukey" : "_main_cmk" ;
-	// 	}
-	// 	strcpy(pm_monolith->table_name, vault);
-	// 
-	// 	if (name) {
-	// 		if ( !pmsql_safe_in(name) || strlen(name) > 31 ) {
-	// 			printf("Illegal name: %s\n", name);
-	// 			return;
-	// 		}
-	// 	}
-	// 	// printf("%s : %s {%s}\n", verbs[i], name, pm_monolith->table_name );
-	// 	(*functions[i])(pm_monolith, name);
-	// 	return;
-	// }
 
 int cli_new( int argc, char * * argv, pm_inst * pm_monolith) {
   if ( argc < 1 ) {
@@ -332,20 +221,22 @@ int set(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 	}
 	// bruh this turned out to be the same length
 	char * rquery;
-	void * data;
+	pmsql_data_t * data;
 	int * data_sz;
 	int * data_tp;
 
 	char ukey = (pm_monolith->pm_opts & UKEY); // >> 2;
 	if ( ukey ) {
 		rquery = "INSERT INTO %s (ID,SALT,MASTER_KEY,CIPHER,VIS,VALIDATE) VALUES (?,?,?,?,?,?)";
-		data = (void *[6]) { name, salt, master_key, pm_monolith->ciphertext, 1, validate };
+		data = (pmsql_data_t[6]) { {.text=name}, {.text=salt}, {.blob=master_key}, 
+			{.blob=pm_monolith->ciphertext}, {.integer=1}, {.integer=validate} };
 		data_sz = (int [6]) { 0, 0, M_KEYSIZE, CIPHERSIZE, 0, 0 };
 		data_tp = (int [6]) { PMSQL_TEXT, PMSQL_TEXT, PMSQL_BLOB, PMSQL_BLOB,
 			PMSQL_INT, PMSQL_INT };
 	} else {
 		rquery = "INSERT INTO %s (ID,SALT,CIPHER,VIS,VALIDATE) VALUES (?,?,?,?,?)";
-		data = (void *[5]) { name, salt, pm_monolith->ciphertext, 1, validate };
+		data = (pmsql_data_t[5]) { {.text=name}, {.text=salt}, {.blob=pm_monolith->ciphertext},
+			{.integer=1}, {.integer=validate} };
 		data_sz = (int [5]) { 0, 0, CIPHERSIZE, 0, 0 };
 		data_tp = (int [5]) { PMSQL_TEXT, PMSQL_TEXT, PMSQL_BLOB, PMSQL_INT, PMSQL_INT};
 	}
@@ -356,7 +247,7 @@ int set(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 
 	sqlite3_stmt * stmt;
 	pmsql_stmt pmsql = { SQLITE_STATIC, pm_monolith->db, stmt, NULL };
-	int ecode = pmsql_compile( &pmsql, query, 5+ukey, data, data_sz, data_tp );
+	int ecode = pmsql_compile( &pmsql, query, 5+(ukey ? 1:0) , data, data_sz, data_tp );
 	if ( ecode < 0 ) {
 		printf("Set: pmsql error during binding (SQLITE : %i ) : %s\n", (-1 * ecode ) ,
 			pmsql.pmsql_error );
@@ -398,7 +289,7 @@ int get(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 	}
 	// These will be used for our calls to the pmsql functions
 	char * rquery;
-	void * * data;
+	pmsql_data_t * data;
 	int * data_tp;
 	int * data_sz;
 	sqlite3_stmt * stmt;
@@ -407,7 +298,7 @@ int get(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 
 	// query to index to get meta / val data for this entry
 	rquery = "SELECT UKEY, SALT, MASTER_KEY FROM _index WHERE ID = ?";
-	data = ( void * [1] ) {pm_monolith->table_name};
+	data = ( pmsql_data_t [1] ) { {.text=pm_monolith->table_name} };
 	data_tp = ( int [1] ) { PMSQL_TEXT };
 	pmsql = &(pmsql_stmt) { SQLITE_STATIC, pm_monolith->db, stmt, NULL };
 
@@ -417,20 +308,23 @@ int get(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 	ecode = sqlite3_step(pmsql->stmt);
 	if ( ecode != SQLITE_ROW ) {
 		goto get_sql_fail;
-	} // get results from query
-	int ukey;
+	} 
+	
+	// get results from query
+	bool ukey;
 	char i_salt[SALTSIZE];
 	char i_mkey[M_KEYSIZE];
-
-	data = ( void * [3] ) { &ukey, &i_salt, &i_mkey };
+	/* put addrs of local vars into pmsql_data union so pmsql reads them into our 
+		 stack variables */ 
+	data = ( pmsql_data_t [3] ) { {.int_wb=&ukey}, {.blob=&i_salt}, {.blob=&i_mkey} };
 	data_sz = ( int[3] ) { 0, (-1 * SALTSIZE), ( -1 * M_KEYSIZE ) };
-	data_tp = ( int[3] ) { PMSQL_INT, PMSQL_BLOB, PMSQL_BLOB };
+	data_tp = ( int[3] ) { PMSQL_INT_WB, PMSQL_BLOB, PMSQL_BLOB };
 
 	if (( ecode = pmsql_read( pmsql, 3, data, data_sz, data_tp )) ) {
 		goto get_sql_fail;
 	}
 
-	ukey &= 1;
+	//ukey &= 1;
 	char entry_val;
 
 	if ( ukey )
@@ -439,7 +333,7 @@ int get(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 		rquery = "SELECT SALT, CIPHER, VALIDATE FROM %s WHERE ID = ?";
 
 	data_tp = ( int[1] ) { PMSQL_TEXT };
-	data = ( char * [1] ) { name };
+	data = ( pmsql_data_t [1] ) { {.text=name} };
 	size_t query_len = strlen(rquery) + strlen(pm_monolith->table_name);
 	char * query = malloc(query_len+1);
 	snprintf(query, query_len, rquery, pm_monolith->table_name);
@@ -453,16 +347,18 @@ int get(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 	}
 
 	if ( ukey ) {
-		data_tp = ( int[4] ) { PMSQL_BLOB, PMSQL_BLOB, PMSQL_BLOB, PMSQL_INT };
-		data = ( void * [4] ) { pm_monolith->master_key, pm_monolith->master_key+SALTSIZE,
-			pm_monolith->ciphertext, &entry_val };
+		data_tp = ( int[4] ) { PMSQL_BLOB, PMSQL_BLOB, PMSQL_BLOB, PMSQL_INT_WB };
+		data = ( pmsql_data_t [4] ) { {.blob=pm_monolith->master_key}, 
+			{.blob=pm_monolith->master_key+SALTSIZE}, {.blob=pm_monolith->ciphertext}, 
+			{.int_wb=&entry_val} };
 		data_sz = ( int[4] ) {SALTSIZE, M_KEYSIZE, CIPHERSIZE, 0};
 	} else {
-		data = ( void * [3] ) { pm_monolith->master_key, pm_monolith->ciphertext, &entry_val };
+		data = ( pmsql_data_t [3] ) { {.blob=pm_monolith->master_key}, 
+			{.blob=pm_monolith->ciphertext}, {.int_wb=&entry_val} };
 		data_sz = ( int[3] ) { SALTSIZE, CIPHERSIZE, 0};
-		data_tp = ( int[3] ) { PMSQL_BLOB, PMSQL_BLOB, PMSQL_INT };
+		data_tp = ( int[3] ) { PMSQL_BLOB, PMSQL_BLOB, PMSQL_INT_WB };
 	}
-	if (( ecode = pmsql_read(pmsql, 3+ukey, data, data_sz, data_tp) )) {
+	if (( ecode = pmsql_read(pmsql, 3+(ukey?1:0), data, data_sz, data_tp) )) {
 		goto get_sql_fail;
 	}
 
@@ -514,8 +410,12 @@ int get(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 	} else if ( res != 0 ) {
 		return -1; //error in dec
 	}
+	if ( pm_monolith->pm_opts & PRETTYOUT ) {  
+		printf("Retreived: %s:%s : %s\n", pm_monolith->table_name, name, pm_monolith->plaintext);
+	} else { 
+		printf( "%s\n", pm_monolith->plaintext); 
+	}
 
-	printf("Retreived: %s:%s : %s\n", pm_monolith->table_name, name, pm_monolith->plaintext);
 	get_cleanup:
 		memset(pm_monolith, 0, sizeof(pm_inst));
 		return 0;
@@ -615,7 +515,7 @@ int mkvault(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 		goto mkv_sql_fail;
 
 	bquery = "INSERT INTO _index (ID, UKEY, VIS) VALUES (?,?,1)";
-	void * * data = ( void * [2] ) { name, ukey };
+	pmsql_data_t * data = ( pmsql_data_t [2] ) { {.text=name} , {.integer=ukey} };
 	int * data_tp = ( int [2] ) { PMSQL_TEXT, PMSQL_INT };
 	//----
 	if (( ecode = pmsql_compile(&pmsql, bquery, 2, data, NULL, data_tp) ))
@@ -722,6 +622,7 @@ int _ls_find(pm_inst * pm_monolith, char * name) {
 	return 0; 
 }
 
+/* TODO structure return value with enum */ 
 int _entry_in_table(pm_inst * pm_monolith, char * tb_name, char * ent_name) {
 	char * rquery = "SELECT VIS FROM %s WHERE ID = ?";
 	size_t query_len = strlen(rquery) + strlen(tb_name);
@@ -855,7 +756,7 @@ int _delete_val( pm_inst * pm_monolith, char * name ) {
 
 	query = "DELETE FROM _index WHERE ID = ?";
 
-	void * * data = (void * [1] ) { name };
+	pmsql_data_t * data = (pmsql_data_t [1] ) { {.text=name} };
 	int * data_tp = (int [1] ){ PMSQL_TEXT };
 	if (( ecode = pmsql_compile( &pmsql, query, 1, data, NULL, data_tp ) ))
 		goto del_val_sql_fail;

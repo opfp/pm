@@ -31,9 +31,9 @@ if (( $? != 0 )); then
 fi 
 
 comp_ciphertxts=( "apples" "banannas" "citr0us" "da1ndel0on") 
+#comp_ciphertxts=( "apples" )
 comp_pswd="very_secure_pswd" 
-upswds=("zenon" "yamahaa!68+1" "xylaph0ne" "walwrus" )
-
+#upswds=("zenon" "yamahaa!68+1" "xylaph0ne" "walwrus" )
 
 #set some compliant ciphertexts in common key (note that name ctext+_e here)  
 for c in $comp_ciphertxts; do 
@@ -46,32 +46,20 @@ for c in $comp_ciphertxts; do
 	fi 
 done 
 
-#get & check the ciphertexts 
-#for c in $comp_ciphertxts; do 
-#	cmd=$invoke_pm" get '"$c"_e' -pword '"$comp_pswd"' 
+# get the entries and ensure they're correct 
 
-exit 
-
-ctxt_len=${#comp_ciphertxts[*]}
-ups_len=${#upswds[*]}
-if (( ctxt_len != ups_len )); then 
-	echo "Test issue: differing length of ciphertexts and passwords"
-fi 
-
-for (( i=1; $i<=ups_len; i++ )); do 
-	ctxt=${comp_ciphertxts[$i]}
-	pswd=${upswds[$i]}
-	cmd=$invoke_pm" set "$ctxt"_e -ctext '"$ctxt"' -pword '"$pswd"' --u"
+for c in $comp_ciphertxts; do 
+	cmd=$invoke_pm" get "$c"_e  -pword '"$comp_pswd"'"
 	echo $cmd 
-	eval $cmd 
+	retrieved=$(eval $cmd | tr -d '\n')
+
 	if (( $? != 0 )); then 
-		echo "TEST FAILED: compliant cipher set "$c" pswd "$pswd" in unique key" 
+		echo "TEST FAILED: with error "$?" compliant cipher get "$c"_e pswd '"$comp_pswd"'"
+		exit -1 
+	fi 
+
+	if [[ $c != $retrieved ]]; then 
+		echo "TEST FAILED: compliant cipher get "$c"_e returned '"$retrieved"' expected '"$c"'"
 		exit -1 
 	fi 
 done 
-
-#function set { 
-#	cmd=$bdir"/pmd set "$1" -password '"$2"'"
-#	echo $cmd 
-#	#eval cmd
-#} 
