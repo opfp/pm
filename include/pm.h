@@ -3,15 +3,15 @@
 
 #include "common.h"
 
-// pm_inst * __init__();
+// pm opts
+typedef uint8_t pm_options_t; 
+
+#define NUM_FLAGS 3 
+enum pm_opts { PIPETOSTDOUT=1, SKIPVAL=2, UKEY=4, OVAULT=8, NOCONFIRM=16,
+ 	WARNNOVAL=32, DEFVAULT=64 }; 
 
 int val_pad(char *);
-char * * get_atts_conf( char *, int, char * *);
-
-// sqlite3_stmt * pm_sqlite3_make_stmt( char *, ... );
-
-// void init_guardian( pm_inst * );
-// void guardian_clear_pm( pm_inst *);
-// void guardian_sleep10();
+char * * get_pm_flags(); 
+int * get_flag_bits();  
 
 #endif

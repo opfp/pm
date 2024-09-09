@@ -1,6 +1,104 @@
 #include "pm.h"
 #include "cli.h" 
 
+const char * pm_flags[NUM_FLAGS] = { "unique-key", "skip-validate", "no-confirm" };  
+
+int flag_bit[NUM_FLAGS] = { UKEY, SKIPVAL, NOCONFIRM }; 
+
+int val_pad(char * in) {
+	char pad = 0;
+	for ( int i = 0; i < DATASIZE; i++ ) {
+		unsigned char c = in[i];
+		if ( ( c > 0 && c < 32) || c == 127 || c == 59) {
+			return -1;
+		}
+		if ( c == 0 ){
+			in[i] = 59; // padding
+		}
+	}
+	return 0;
+}
+
+char * * get_atts_conf( char * conf_str, int attc, char * * att_map, pm_options_t * opts_wb) {
+	if ( !conf_str || !att_map )
+		return NULL;
+
+	/* process flags */ 
+	char * rv = conf_str; //strstr(; 
+	char * flag_name, * flag_end; 
+	int f; 
+	char c; 
+	bool do_not_cont=false; 
+	pm_options_t options_bmp =0; 
+
+	while ( !do_not_cont && (rv = strstr(rv, "\nsetflag ") ) ){ 
+		flag_name = rv+9; 	
+		flag_end = flag_name; 
+		while ( 1 ) { 
+			c=*flag_end; 
+			if ( !c ) { 
+				do_not_cont=true; 
+				break; 
+			}
+			if ( c == ' ' || c == '\n' )  
+				break; 
+			flag_end++; 
+		}
+
+		c=*flag_end; 
+		*flag_end='\0'; 	
+
+		for ( f = 0; f<NUM_FLAGS; f++ ) { 
+			if ( !strcmp(flag_name, pm_flags[f] ) ) 
+				break; 
+		}
+
+		if ( f == NUM_FLAGS ) { 
+			//fprintf(stderr, "Unknown flag in conf file: %s\n", flag_name ); 
+			printf( "Unknown flag in conf file: %s\n", flag_name ); 
+		} else { 
+			options_bmp |= flag_bit[f]; 	
+		}		
+
+		*flag_end=c; 
+		rv = flag_end+1; 
+	} 
+
+	*opts_wb=options_bmp; 
+
+	/* process attributes */ 
+	char * * ret = malloc( attc * sizeof(char *) );
+	for( int i = 0; i < attc; i++ ) {
+		char * this_attr = strstr(conf_str, att_map[i]);
+		_found_att_ck:; 
+		if (!this_attr) { 
+			ret[i] = NULL;
+			continue; 
+		}
+		if ( *(this_attr+strlen(att_map[i])) != '=' || 
+				( *(this_attr-1) != 1 && *(this_attr-1) != '\n' ) ) { 
+			this_attr = strstr(this_attr + 1, att_map[i]);
+			goto _found_att_ck; 
+		} 
+
+		char * eoa = this_attr; 
+		char c; 
+		while ( (c = *eoa++) && c != '\n' && c != ' ' ) { } 
+		*(eoa-1) = 1; // flag for put 0 here later
+		ret[i] = this_attr+strlen(att_map[i])+1;
+	}
+	
+	/* seperate the old file buffer with nulltrms (each new buf is in att_map ) */ 
+	char * rover = strchr(conf_str, 1);
+	while (rover) {
+		*rover++ = 0;
+		rover = strchr(rover, 1);
+	}
+
+
+	return ret;
+}
+
 int parse_pm_conf(pm_inst * pm_monolith/*, char * conf_path*/ ) { 
 	char * conf_path = pm_monolith->conf_path; 
 
@@ -27,12 +125,13 @@ int parse_pm_conf(pm_inst * pm_monolith/*, char * conf_path*/ ) {
 
 	char * pm_conf_str = malloc(pm_conf_sz+2);
 	pm_conf_str[0] = '\n'; 
-	pm_conf_str[pm_conf_sz] = 0;
-	fread( pm_conf_str+1, 1, pm_conf_sz, pm_conf);
+	pm_conf_str[pm_conf_sz+1] = '\0';
+	fread( pm_conf_str+1, 1, pm_conf_sz, pm_conf); 
 
-	char * att_names[] = { "cooldown" , "db_path" , "confirm_cphr",
+	char * att_names[] = { /*"cooldown" ,*/ "db_path" , "confirm_cphr",
 		 "warn", "def_tables" };
-	char * * atts = get_atts_conf( pm_conf_str, 5, att_names);
+
+	char * * atts = get_atts_conf( pm_conf_str, 4, att_names, &pm_monolith->pm_opts );
 
 	// for ( int i = 0; i < 5; i++ ) { 
 	//	 printf("%s : '%s'\n", att_names[i], atts[i] ); 
@@ -43,21 +142,54 @@ int parse_pm_conf(pm_inst * pm_monolith/*, char * conf_path*/ ) {
 		return -1;
 	}
 
-	int cooldown = atoi(atts[0]);
-	char * db_path = atts[1];
+	//int cooldown = atoi(atts[0]);
+	char * db_path = atts[0];
 
-	if ( cooldown > 600 ) {
-		cooldown = 600;
-		printf("Maximum configurable cooldown is 600s. Edit your cooldown settings"
-			" in %s to avoid seeing this warning in the future.", conf_path );
-	}
+	//if ( cooldown > 600 ) {
+	//	cooldown = 600;
+	//	printf("Maximum configurable cooldown is 600s. Edit your cooldown settings"
+	//		" in %s to avoid seeing this warning in the future.", conf_path );
+	//}
 
 	sqlite3 * db;
-	if ( sqlite3_open(db_path, &db) ) {
+	if ( sqlite3_open(db_path, &db) != SQLITE_OK ) {
 		printf("Init: error connecting to database: %s. [ pm chattr db_path ] or edit %s\n",
 			db_path, conf_path);
 		return -1;
 	}
+	/* check if db is well formed */ 
+	char * queries[] = {  
+		"SELECT name FROM sqlite_master WHERE type='table' AND name='_index'", 
+		"SELECT name FROM sqlite_master WHERE type='table' AND name='_main_cmk'", 
+		"SELECT name FROM sqlite_master WHERE type='table' AND name='_main_ukey'" 
+	};
+
+	int ecode; 
+	sqlite3_stmt * stmt;
+	for ( int i = 0; i<3; i++ ) { 
+		if ( sqlite3_prepare_v2( db, queries[i], -1, &stmt, NULL ) != SQLITE_OK )  
+			goto _db_chk_sql_error; 
+
+		ecode = sqlite3_step( stmt ); 
+		if ( ecode == SQLITE_DONE ) 
+			goto _db_chk_trap; 
+		else if ( ecode != SQLITE_ROW ) 
+			goto _db_chk_sql_error; 
+
+		sqlite3_finalize(stmt); 
+		continue; 
+
+		_db_chk_trap:;  
+			printf("Error: database %s is malformed, check your configuration file %s\n", 
+					db_path, pm_monolith->conf_path );  
+			return -1; 
+
+		_db_chk_sql_error:; 	
+			printf("Error preparing or executing statment to check db: %s\n", queries[i] ); 
+			return -1; 
+		}
+		
+
 	// for( int i = num_flags; i < num_flags + 3; i++) {
 	//	 printf("%s : %s\n", att_names[i], atts[i]);
 	//	 opts_chr |= ( ( atoi(atts[i]) & 1 ) << i );
@@ -74,73 +206,13 @@ int parse_pm_conf(pm_inst * pm_monolith/*, char * conf_path*/ ) {
 	}
 
 	//pm_monolith->pm_opts = opts_chr;
-	pm_monolith->cooldown = cooldown;
+	//pm_monolith->cooldown = cooldown;
 
 	//char table_name[] = "test";
 	//strncpy(pm_monolith->table_name, table_name, 15);
 
 	pm_monolith->db = db;
 	return 0; 
-}
-
-//int parse_cli_args( pm_inst * pm_monolith, 
-
-int val_pad(char * in) {
-	char pad = 0;
-	for ( int i = 0; i < DATASIZE; i++ ) {
-		unsigned char c = in[i];
-		if ( ( c > 0 && c < 32) || c == 127 || c == 59) {
-			return -1;
-		}
-		if ( c == 0 ){
-			in[i] = 59; // padding
-		}
-	}
-	return 0;
-}
-
-char * * get_atts_conf( char * conf_str, int attc, char * * att_map) {
-	if ( !conf_str || !att_map )
-		return NULL;
-
-	char * * ret = malloc( attc * sizeof(char *) );
-	for( int i = 0; i < attc; i++ ) {
-		char * this_attr = strstr(conf_str, att_map[i]);
-		_found_att_ck:; 
-		if (!this_attr) { 
-			ret[i] = NULL;
-			continue; 
-		}
-		if ( *(this_attr+strlen(att_map[i])) != '=' || ( *(this_attr-1) != 1 && *(this_attr-1) != '\n' ) ) { 
-			this_attr = strstr(this_attr + 1, att_map[i]);
-			goto _found_att_ck; 
-		} 
-
-		// // all this is so keys which are also values don't cause trouble
-		// while ( *(this_attr+strlen(att_map[i])) != '=' ) {
-		//	 // printf("%s\n", this_attr );
-		//	 this_attr = strstr(this_attr + 1, att_map[i]);
-		//	 if ( !this_attr )
-		//		 return NULL;
-		// }
-		// this_attr = strchr(this_attr, '=')+1;
-		char * eoa = this_attr; 
-		char c; 
-		while ( (c = *eoa++) && c != '\n' && c != ' ' ) { } 
-		*(eoa-1) = 1; // flag for put 0 here later
-		ret[i] = this_attr+strlen(att_map[i])+1;
-	}
-	// char * rv = conf_str; 
-	// while ( *(rv=strchr(rv,1))=0) { 
-	//	 ++rv; 
-	// } 
-	
-	char * rover = strchr(conf_str, 1);
-	while (rover) {
-		*rover++ = 0;
-		rover = strchr(rover, 1);
-	}
-	return ret;
 }
 
 int main( int argc, char * * argv ) {
@@ -152,8 +224,9 @@ int main( int argc, char * * argv ) {
 
 	pm_inst * pm_monolith = calloc( sizeof(pm_inst), 1);
 
-	char * pm_conf_path = malloc(strlen(argv[1]+1));
-	strncpy(pm_conf_path, argv[1], strlen(argv[1])); 
+	size_t conf_sz = strlen(argv[1]); 
+	char * pm_conf_path = malloc(conf_sz+1);
+	strncpy(pm_conf_path, argv[1], conf_sz+1); 
 	pm_monolith->conf_path = pm_conf_path;
 
 	if ( parse_pm_conf(pm_monolith )) {   
@@ -203,3 +276,6 @@ int main( int argc, char * * argv ) {
 
 	//cli_main(argc - 2 - ( argv[argc-1][0] == '-' ), &argv[2], PM_INST);
 }
+
+char * * get_pm_flags() { return pm_flags; } 
+int * get_flag_bits() { return flag_bit; } 

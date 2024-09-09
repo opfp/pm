@@ -16,11 +16,11 @@ int _apply_kwargs( int, char **, char * * kw_vals, pm_inst * );
 int _apply_flags ( int, char **, pm_inst * );  
 
 char * keywords[KW_NUM] = { "vault", "ctext", "pword", "name" }; 
-
+/*
 #define NUM_FLAGS 3 
 char * flags[NUM_FLAGS] = { "unique-key", "skip-validate", "no-confirm" };  
 int flag_bit[NUM_FLAGS] = { UKEY, SKIPVAL, NOCONFIRM }; 
-
+*/
 // void cli_main( int argc, char * * argv, pm_inst * pm_monolith) {
 	// 	if ( argc < 1 ) {
 	// 		printf("pm: Not enough arguments. [pm help] for help, or read the docs.\n");
@@ -1006,6 +1006,9 @@ int _apply_kwargs( int argc, char * * argv, char * * kw_vals, pm_inst * pm_monol
 
 int _apply_flags ( int argc, char * * argv, pm_inst * pm_monolith) { 
 	int arg_len, flag_to_apply;  
+	char ** pm_flags = get_pm_flags(); 
+	int * flag_bit = get_flag_bits(); 
+
 	for ( int i = 0; i < argc; i++ ) { 	
 		if ( argv[i] == NULL ) 
 			continue; 
@@ -1018,7 +1021,7 @@ int _apply_flags ( int argc, char * * argv, pm_inst * pm_monolith) {
 
 		if ( arg_len == 3 ) { 
 			for ( int j = 0; j < NUM_FLAGS; ++j ) { 	
-				if ( argv[i][2] == flags[j][0] ) { 
+				if ( argv[i][2] == pm_flags[j][0] ) { 
 					flag_to_apply = flag_bit[j]; 
 					goto apply_flag; 
 				}
@@ -1027,7 +1030,7 @@ int _apply_flags ( int argc, char * * argv, pm_inst * pm_monolith) {
 		}
 
 		for ( int j = 0; j < NUM_FLAGS; ++j ) { 	
-			if ( strcmp( argv[i]+2, flags[j]) == 0 ) { 
+			if ( strcmp( argv[i]+2, pm_flags[j]) == 0 ) { 
 				flag_to_apply = flag_bit[j]; 
 				goto apply_flag; 
 			}
