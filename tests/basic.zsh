@@ -63,3 +63,7 @@ for c in $comp_ciphertxts; do
 		exit -1 
 	fi 
 done 
+
+#test ls 
+
+

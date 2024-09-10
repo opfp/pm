@@ -55,6 +55,7 @@ for (( i=1; $i<=ups_len; i++ )); do
 	fi 
 done 
 
+#exit
 # get the entries and ensure they're correct 
 
 for (( i=1; $i<=ups_len; i++ )); do 
@@ -63,13 +64,13 @@ for (( i=1; $i<=ups_len; i++ )); do
 	cmd=$invoke_pm" get "$ctxt"_e  -pword '"$pswd"'"
 	echo $cmd 
 	retrieved=$(eval $cmd)
-	echo $retrieved
+	#echo $retrieved
 	if (( $? != 0 )); then 
 		echo "TEST FAILED: with error "$?" compliant cipher get "$ctxt"_e pswd "$pswd" in unique key"
 		exit -1 
 	fi 
 
-	if test $ctxt!=$retrieved; then 
+	if [[ $ctxt != $retrieved ]]; then 
 		echo "TEST FAILED: compliant cipher get "$ctxt"_e returned "$retrieved" expected "$ctxt 
 		exit -1 
 	fi 

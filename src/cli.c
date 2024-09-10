@@ -2,7 +2,22 @@
 #include "enc.h" 
 #include "pm.h" 
 
-//enum verb_type { 
+// exposed cli commands
+int set(pm_inst *, char *, char **);
+int get(pm_inst *, char *, char **);
+int forget(pm_inst *, char *, char **);
+int forget_v(pm_inst *, char *, char **);
+int recover(pm_inst *, char *, char **);
+int recover_v(pm_inst *, char *, char **);
+int delete(pm_inst *, char *, char **);
+int delete_v(pm_inst *, char *, char **);
+int mkvault(pm_inst *, char *, char **);
+int rmvault(pm_inst *, char *, char **);
+int ls(pm_inst *, char *, char **);
+int ls_v(pm_inst *, char *, char **);
+int check(pm_inst *, char *, char **);
+int help(pm_inst *, char *, char **);
+int conf(pm_inst *, char *, char **);
 
 // private function declarations
 int _ls_find(pm_inst *, char *);
@@ -55,13 +70,14 @@ int cli_new( int argc, char * * argv, pm_inst * pm_monolith) {
 	} 
 
   //#ifndef NUM_VERBS
-  #define NUM_VERBS 10 
+  #define NUM_VERBS 13 
   //#endif 
   char * verbs[NUM_VERBS] = { "set", "get", "mkv", "forg", "rec", "del",
-  	"check", /*last 3 don't require name*/ "ls", "help", "conf" };
+  	"forg-vault", "rec-vault", "del-vault", " check", 
+		/*last 4 don't require name*/ "ls", "ls-vault", "help", "conf" };
 
 	int (*functions[])(pm_inst *, char *, char **) = { set, get, mkvault, forget, recover,
-		delete, check, ls, help, conf };
+		delete, forget_v, recover_v, delete_v, check, ls, ls_v, help, conf };
 
   int verb_idx = 0;
   while ( verb_idx < NUM_VERBS ) {
@@ -75,7 +91,7 @@ int cli_new( int argc, char * * argv, pm_inst * pm_monolith) {
 	  return SYNTAX;
   }
 
-	if ( verb_idx < 7 && name == NULL ) { 
+	if ( verb_idx < 10 && name == NULL ) { 
 		printf("Name required for %s operation\n", verbs[verb_idx] );   
 		return SYNTAX; 
 	}
@@ -311,7 +327,7 @@ int get(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 	} 
 	
 	// get results from query
-	bool ukey;
+	int ukey;
 	char i_salt[SALTSIZE];
 	char i_mkey[M_KEYSIZE];
 	/* put addrs of local vars into pmsql_data union so pmsql reads them into our 
@@ -325,7 +341,7 @@ int get(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 	}
 
 	//ukey &= 1;
-	char entry_val;
+	int entry_val;
 
 	if ( ukey )
 		rquery = "SELECT SALT, MASTER_KEY, CIPHER, VALIDATE FROM %s WHERE ID = ?";
@@ -428,30 +444,64 @@ int get(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 }
 
 int forget(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
-	char * table = (pm_monolith->pm_opts & OVAULT) ? "_index" : pm_monolith->table_name ;
-	return _recover_or_forget(pm_monolith, table, name, 0);
+	//char * table = (pm_monolith->pm_opts & OVAULT) ? "_index" : pm_monolith->table_name ;
+	return _recover_or_forget(pm_monolith, pm_monolith->table_name, name, 0);
+}
+
+int forget_v(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
+	return _recover_or_forget(pm_monolith, "_index", name, 0);
 }
 
 int recover(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
-	char * table = (pm_monolith->pm_opts & OVAULT) ? "_index" : pm_monolith->table_name ;
+	//char * table = (pm_monolith->pm_opts & OVAULT) ? "_index" : pm_monolith->table_name ;
 	//printf("%i : %s\n", (pm_monolith->pm_opts & 8), table  );
-	return _recover_or_forget(pm_monolith, table, name, 1);
+	return _recover_or_forget(pm_monolith, pm_monolith->table_name, name, 1);
+}
+
+int recover_v(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
+	return _recover_or_forget(pm_monolith, "_index", name, 1);
 }
 
 int delete(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 	int name_len = strlen(name);
-	char vault = (pm_monolith->pm_opts & OVAULT);// >> 3;
-	char * table = vault ? "_index" : pm_monolith->table_name ;
+	//char vault = (pm_monolith->pm_opts & OVAULT);// >> 3;
+	//char * table = vault ? "_index" : pm_monolith->table_name ;
 
-	if ( ! _entry_in_table(pm_monolith, table, name) ) {
+	if ( ! _entry_in_table(pm_monolith, pm_monolith->table_name, name) ) {
 		printf("Del: no entry to delete\n");
 		return DNE; 
 	}
 
 	if ( ! ( pm_monolith->pm_opts & NOCONFIRM ) ) { 
-		printf("This will permanently delete %s. This action cannot be undone."
+		printf("This will permanently delete %s:%s. This action cannot be undone."
 			" Use forget [pm help forg] to mark as forgotten, which can be undone"\
 			" (until an entry of the same name is set).\nProceed with permanent"\
+			" deletion? (y/n)\n", pm_monolith->table_name, name);
+		if ( fgetc(stdin) != 'y' ) {
+			printf("Del: aborting\n");
+			return 0;
+		}
+	}
+
+	//if ( vault )
+	//	return _delete_val(pm_monolith, name);
+	//else
+	return _delete(pm_monolith, name);
+}
+
+int delete_v(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
+	int name_len = strlen(name);
+
+	if ( ! _entry_in_table(pm_monolith, pm_monolith->table_name, name) ) {
+		printf("Del: no entry to delete\n");
+		return DNE; 
+	}
+
+	if ( ! ( pm_monolith->pm_opts & NOCONFIRM ) ) { 
+		printf("This will permanently delete vault %s and all of its contents."\
+			" This action cannot be undone."\
+			" Use forget-vault [pm help forg] to mark as forgotten, which can be undone"\
+			" (until a vault with the same name is created).\nProceed with permanent"\
 			" deletion? (y/n)\n", name);
 		if ( fgetc(stdin) != 'y' ) {
 			printf("Del: aborting\n");
@@ -459,10 +509,7 @@ int delete(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 		}
 	}
 
-	if ( vault )
-		return _delete_val(pm_monolith, name);
-	else
-		return _delete(pm_monolith, name);
+	return _delete_val(pm_monolith, name);
 }
 
 int mkvault(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
@@ -537,6 +584,11 @@ int ls(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 	return _ls_find(pm_monolith, name);// >> 3 ) ;
 }
 
+int ls_v(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
+	strcpy( &pm_monolith->table_name, "_index"); 
+	return _ls_find(pm_monolith, name);// >> 3 ) ;
+}
+
 int check(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 	printf("Check does nothing right now\n");
 	return 0;
@@ -560,9 +612,9 @@ int conf(pm_inst * pm_monolith, char * name, char * * kwarg_vals){
 
 int _ls_find(pm_inst * pm_monolith, char * name) {
 	// printf("ls_find(%s, %i)\n", name, vault );
-	char vault = pm_monolith->pm_opts & OVAULT;
+	//char vault = pm_monolith->pm_opts & OVAULT;
 	char * table = pm_monolith->table_name;
-	if ( vault && ! _entry_in_table(pm_monolith, "_index", pm_monolith->table_name) ) {
+	if ( /*vault &&*/ ! _entry_in_table(pm_monolith, "_index", table) ) {
 		if ( strcmp(table,"_index")) {
 			name = pm_monolith->table_name;
 			table = "_index";
@@ -613,8 +665,8 @@ int _ls_find(pm_inst * pm_monolith, char * name) {
 	i = 1;
 	while ( all[i] ) {
 		if ( all[0][i] ) {
-			if ( vault && name )
-				printf("\t");
+			//if ( vault && name )
+			//	printf("\t");
 			printf("%s\n", all[i]);
 		}
 		++i;
