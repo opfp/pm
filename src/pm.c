@@ -1,7 +1,9 @@
 #include "pm.h"
 #include "cli.h" 
 
-const char * pm_flags[NUM_FLAGS] = {"unique-key", "skip-validate", "no-confirm","pretty-out"};  
+const char * pm_flags[NUM_FLAGS] = {"unique-key", "skip-validate", "no-confirm", 
+	"pretty-out", "show-invis"};  
+/* TODO : implement flag shortcuts ie --u */ 
 
 int flag_bit[NUM_FLAGS] = { UKEY, SKIPVAL, NOCONFIRM, PRETTYOUT }; 
 

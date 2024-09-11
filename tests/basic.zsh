@@ -66,4 +66,5 @@ done
 
 #test ls 
 
-
+#cmd=$invoke_pm" ls" 
+#ls_out=$(eval 

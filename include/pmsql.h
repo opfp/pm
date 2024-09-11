@@ -22,6 +22,8 @@ typedef struct {
     char * pmsql_error;
 } pmsql_stmt;
 
+enum sql_vis_meaining { VIS_FORGOTTEN=0, VIS_VISIBLE=1 }; 
+
 int pmsql_compile( pmsql_stmt *, char *, int, pmsql_data_t *, int *, int * );
 int pmsql_read(pmsql_stmt *, int, pmsql_data_t *, int *, int * );
 int pmsql_safe_in(char *); 

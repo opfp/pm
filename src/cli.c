@@ -20,17 +20,21 @@ int help(pm_inst *, char *, char **);
 int conf(pm_inst *, char *, char **);
 
 // private function declarations
-int _ls_find(pm_inst *, char *);
-int _recover_or_forget(pm_inst *, char *, char *, int);
-int _delete(pm_inst *, char *);
-int _delete_val(pm_inst *, char *);
-char * * _find_by_key( pm_inst *, char *, char *, int);
-int _fbk_compare( const void *, const void *);
-char * * _all_in_table(pm_inst *, char *);
-int _apply_kwargs( int, char **, char * * kw_vals, pm_inst * );  
-int _apply_flags ( int, char **, pm_inst * );  
+//int _ls_find(pm_inst *, char *);
 
-char * keywords[KW_NUM] = { "vault", "ctext", "pword", "name" }; 
+int _find_by_name(pm_inst * , char * name) ;
+int _ls_all(pm_inst *  ) ;
+int _entry_in_table(pm_inst * , char * tb_name, char * ent_name) ;
+int _recover_or_forget(pm_inst * , char * table, char * name, int op );
+int _delete(pm_inst * , char * name) ;
+int _delete_val( pm_inst * , char * name ) ;
+char * * _find_by_key( pm_inst * , char * tb, char * key, int numres, bool include_invis); 
+int _fbk_compare( const void * a, const void * b);
+char * * _all_in_table( pm_inst * , char * tb_name ) ;
+int _apply_kwargs( pm_inst * , int argc, char * * argv, char * * kw_vals ) ;  
+int _apply_flags(pm_inst * , int argc, char * * argv) ; 
+
+char * keywords[KW_NUM] = { "vault", "ctext", "pword", "new-pword", "name" }; 
 
 int cli_new( int argc, char * * argv, pm_inst * pm_monolith) {
   if ( argc < 1 ) {
@@ -42,10 +46,10 @@ int cli_new( int argc, char * * argv, pm_inst * pm_monolith) {
 	/* pm [verb] [name] [kwargs . . . ] */ 
 	/* first apply kwargs */ 
 	char * * kwargs_vals = calloc( KW_NUM, sizeof(char *) ); 	
-	if ( _apply_kwargs( argc, argv, kwargs_vals, pm_monolith) ) 
+	if ( _apply_kwargs(pm_monolith, argc, argv, kwargs_vals) ) 
 		return SYNTAX; 
 	/* then apply flags */ 
-	if ( _apply_flags( argc, argv, pm_monolith) ) 
+	if ( _apply_flags( pm_monolith, argc, argv) ) 
 		return SYNTAX; 
 
 	/* all that is left should be the verb and perhaps a name */ 
@@ -70,7 +74,7 @@ int cli_new( int argc, char * * argv, pm_inst * pm_monolith) {
 	} 
 
   //#ifndef NUM_VERBS
-  #define NUM_VERBS 13 
+  #define NUM_VERBS 14
   //#endif 
   char * verbs[NUM_VERBS] = { "set", "get", "mkv", "forg", "rec", "del",
   	"forg-vault", "rec-vault", "del-vault", " check", 
@@ -332,6 +336,8 @@ int get(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 	char i_mkey[M_KEYSIZE];
 	/* put addrs of local vars into pmsql_data union so pmsql reads them into our 
 		 stack variables */ 
+
+	/* TODO: why are we even fetching the master key here if it is always fetched again? */ 
 	data = ( pmsql_data_t [3] ) { {.int_wb=&ukey}, {.blob=&i_salt}, {.blob=&i_mkey} };
 	data_sz = ( int[3] ) { 0, (-1 * SALTSIZE), ( -1 * M_KEYSIZE ) };
 	data_tp = ( int[3] ) { PMSQL_INT_WB, PMSQL_BLOB, PMSQL_BLOB };
@@ -445,21 +451,21 @@ int get(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 
 int forget(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 	//char * table = (pm_monolith->pm_opts & OVAULT) ? "_index" : pm_monolith->table_name ;
-	return _recover_or_forget(pm_monolith, pm_monolith->table_name, name, 0);
+	return _recover_or_forget(pm_monolith, pm_monolith->table_name, name, VIS_FORGOTTEN);
 }
 
 int forget_v(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
-	return _recover_or_forget(pm_monolith, "_index", name, 0);
+	return _recover_or_forget(pm_monolith, "_index", name, VIS_FORGOTTEN);
 }
 
 int recover(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 	//char * table = (pm_monolith->pm_opts & OVAULT) ? "_index" : pm_monolith->table_name ;
 	//printf("%i : %s\n", (pm_monolith->pm_opts & 8), table  );
-	return _recover_or_forget(pm_monolith, pm_monolith->table_name, name, 1);
+	return _recover_or_forget(pm_monolith, pm_monolith->table_name, name, VIS_VISIBLE);
 }
 
 int recover_v(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
-	return _recover_or_forget(pm_monolith, "_index", name, 1);
+	return _recover_or_forget(pm_monolith, "_index", name, VIS_VISIBLE);
 }
 
 int delete(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
@@ -581,12 +587,18 @@ int mkvault(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 }
 
 int ls(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
-	return _ls_find(pm_monolith, name);// >> 3 ) ;
+	if ( name == NULL ) 
+		return _ls_all(pm_monolith);
+	else 
+		return _find_by_name(pm_monolith, name);// >> 3 ) ;
 }
 
 int ls_v(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
 	strcpy( &pm_monolith->table_name, "_index"); 
-	return _ls_find(pm_monolith, name);// >> 3 ) ;
+	if ( name == NULL ) 
+		return _ls_all(pm_monolith);
+	else 
+		return _find_by_name(pm_monolith, name);// >> 3 ) ;
 }
 
 int check(pm_inst * pm_monolith, char * name, char * * kwarg_vals) {
@@ -606,50 +618,78 @@ int conf(pm_inst * pm_monolith, char * name, char * * kwarg_vals){
 	return 0; 
 }
 
-//void chpass( pm_inst * pm_monolith, char * name ) { 
-//
-//}
+int chpass(pm_inst * pm_monolith, char * name, char * * kwarg_vals) { 
+	printf("chpass not implemented yet\n"); 
+	return 0; 
+	//if ( kwargs_vals[KW_PASS] == NULL ) { 	
+	//	char * rprompt = "Enter the old password for the vault %s:\n";
+	//	char * prompt = malloc(strlen(rprompt) + strlen(name) + 1);
+	//	sprintf(prompt, rprompt, name);
+	//	char * ctxt = getpass(prompt);
+	//	free(prompt);
+	//}
+}
 
-int _ls_find(pm_inst * pm_monolith, char * name) {
-	// printf("ls_find(%s, %i)\n", name, vault );
-	//char vault = pm_monolith->pm_opts & OVAULT;
+int _find_by_name(pm_inst * pm_monolith, char * name) {
 	char * table = pm_monolith->table_name;
-	if ( /*vault &&*/ ! _entry_in_table(pm_monolith, "_index", table) ) {
-		if ( strcmp(table,"_index")) {
-			name = pm_monolith->table_name;
-			table = "_index";
-		}
-		//
+	//if ( /*vault &&*/ ! _entry_in_table(pm_monolith, "_index", table) ) {
+	//	if ( strcmp(table,"_index")) {
+	//		name = pm_monolith->table_name;
+	//		table = "_index";
+	//	}
+	//}
+
+	bool pretty = pm_monolith->pm_opts & PRETTYOUT; 
+	bool show_iv = pm_monolith->pm_opts & SHOW_INVIS; 
+	bool matched = false; 
+
+	int found_code = _entry_in_table( pm_monolith, table, name); 
+
+	if ( found_code == VIS_ENTRY || ( show_iv && found_code==FORG_ENTRY ) ) {
+		matched=true; 
+		if ( pretty )  
+			printf("%s:%s found.\n", table, name );
+		else 
+			printf("%s:%s\n", table, name ); 
 	}
-	// printf("name: %s. table: %s\n", name, table );
 
-	if ( name )
-		goto _ls_swithin;
+	char * * sims = _find_by_key(pm_monolith, table, name, 8, show_iv);
+	//char * entry_visible = sims[0]; 	
 
-	goto _ls_printall;
-
-	_ls_swithin:
-	if ( _entry_in_table( pm_monolith, table, name ) ) {
-		printf("%s:%s found.\n", table, name );
-	}
-
-	char * * sims = _find_by_key(pm_monolith, table, name, 8);
-
-	if (!sims ) {
-		printf("%s:%s not found. No similer entries were found either.\n",
-			table, name);
+	if (!sims && matched ) {
+		return 0; 
+	} else if ( !sims ) { 
+		if ( pretty ) 
+			printf("%s:%s not found. No similer entries were found either.\n", table, name);
 		return DNE;
 	}
-	printf("%s:%s not found. See these similar entries:\n", table, name);
+
 	int i = 1;
 	while(sims[i]) {
-		printf("%i : %s\n",i, sims[i] );
+		//if ( !show_iv && !entry_visible[i] )  
+		//	continue; 
+		if ( pretty ) 
+			printf("%i : %s\n",i, sims[i] );
+		else 
+			printf("%s\n", sims[i] );
 		++i;
 	}
 	free(sims);
 	return 0;
+}
 
-	_ls_printall:;
+int _ls_all(pm_inst * pm_monolith ) {
+	char * table = pm_monolith->table_name;
+	//if ( !_entry_in_table(pm_monolith, "_index", table) ) {
+	//	if ( strcmp(table,"_index")) {
+	//		name = pm_monolith->table_name;
+	//		table = "_index";
+	//	}
+	//}
+
+	bool pretty = pm_monolith->pm_opts & PRETTYOUT; 
+	bool show_iv = pm_monolith->pm_opts & SHOW_INVIS; 
+
 	char * * all = _all_in_table(pm_monolith, table );
 	if (!all ) {
 		return 0;
@@ -657,14 +697,12 @@ int _ls_find(pm_inst * pm_monolith, char * name) {
 	char * * ct = all+1;
 	while (*ct++) {};
 	int rows = ct - ( all + 2 );
-	// printf("Counted %i rows\n", rows );
-	// printf("%s\n",*((all+1) + rows) );
-	//--
+
 	qsort(all+1, rows, sizeof(char *), strcmp_for_qsort );
-	//--
-	i = 1;
+
+	int i = 1;
 	while ( all[i] ) {
-		if ( all[0][i] ) {
+		if ( show_iv || all[0][i] ) {
 			//if ( vault && name )
 			//	printf("\t");
 			printf("%s\n", all[i]);
@@ -693,7 +731,7 @@ int _entry_in_table(pm_inst * pm_monolith, char * tb_name, char * ent_name) {
 
 	ecode = sqlite3_step(statement);
 	if ( ecode == SQLITE_DONE )
-		return 0;
+		return NO_ENTRY;
 
 	else if ( ecode != SQLITE_ROW )
 		goto eit_sql_fail;
@@ -701,7 +739,14 @@ int _entry_in_table(pm_inst * pm_monolith, char * tb_name, char * ent_name) {
 	ecode = sqlite3_column_int(statement, 0);
 	sqlite3_finalize(statement);
 
-	return ecode + 1;
+	if ( ecode == VIS_FORGOTTEN ) { 
+		return FORG_ENTRY; 
+	} if ( ecode == VIS_VISIBLE ) { 
+		return VIS_ENTRY; 
+	} 
+
+	printf("Error: invalid VIS %d in %s:%s\n", ecode, tb_name, ent_name );   
+	return -1; 
 
 	eit_sql_fail:
 		printf("Entry in Vault: SQL Error: %s\n", sqlite3_errmsg(pm_monolith->db) );
@@ -826,7 +871,8 @@ int _delete_val( pm_inst * pm_monolith, char * name ) {
 }
 
 char * FBK_KEY; // No way to get around glob unfortuantely
-char * * _find_by_key( pm_inst * pm_monolith, char * tb, char * key, int numres ) {
+char * * _find_by_key( pm_inst * pm_monolith, char * tb, char * key, int numres, 
+		bool include_invis ) {
 	char * * all = _all_in_table( pm_monolith, tb );
 
 	if ( !all )
@@ -926,7 +972,7 @@ char * * _all_in_table( pm_inst * pm_monolith, char * tb_name ) {
 		return NULL;
 }
 
-int _apply_kwargs( int argc, char * * argv, char * * kw_vals, pm_inst * pm_monolith) {  
+int _apply_kwargs( pm_inst * pm_monolith, int argc, char * * argv, char * * kw_vals ) {  
 	int kw_len, kw_toapply, kw_val_len; 
 	for ( int i = 0; i < argc-1; ++i ) { 
 		if ( argv[i] == NULL ) 
@@ -957,7 +1003,7 @@ int _apply_kwargs( int argc, char * * argv, char * * kw_vals, pm_inst * pm_monol
 	return 0; 
 }
 
-int _apply_flags ( int argc, char * * argv, pm_inst * pm_monolith) { 
+int _apply_flags(pm_inst * pm_monolith, int argc, char * * argv) { 
 	int arg_len, flag_to_apply;  
 	char ** pm_flags = get_pm_flags(); 
 	int * flag_bit = get_flag_bits(); 
